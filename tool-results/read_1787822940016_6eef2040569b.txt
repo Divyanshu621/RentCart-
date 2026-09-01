@@ -1,0 +1,659 @@
+     1→'use client';
+     2→
+     3→import { useEffect, useState, useRef, useCallback } from 'react';
+     4→import { motion } from 'framer-motion';
+     5→import {
+     6→  Package,
+     7→  CheckCircle2,
+     8→  IndianRupee,
+     9→  TrendingUp,
+    10→  Search,
+    11→  PlusCircle,
+    12→  MessageSquare,
+    13→  Heart,
+    14→  CalendarClock,
+    15→  Clock,
+    16→  ArrowUpRight,
+    17→  Star,
+    18→  ChevronRight,
+    19→  MapPin,
+    20→  AlertTriangle,
+    21→  Eye,
+    22→  Loader2,
+    23→  Shield,
+    24→} from 'lucide-react';
+    25→import { Card, CardContent } from '@/components/ui/card';
+    26→import { Button } from '@/components/ui/button';
+    27→import { Badge } from '@/components/ui/badge';
+    28→import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+    29→import { Skeleton } from '@/components/ui/skeleton';
+    30→import { Separator } from '@/components/ui/separator';
+    31→import { useAppStore } from '@/store';
+    32→import { api } from '@/lib/api';
+    33→import type { DashboardStats, Rental } from '@/types';
+    34→
+    35→// ─── Animated Counter ──────────────────────────────────────
+    36→function AnimatedCounter({ target, prefix = '', suffix = '', decimals = 0 }: {
+    37→  target: number; prefix?: string; suffix?: string; decimals?: number;
+    38→}) {
+    39→  const [count, setCount] = useState(0);
+    40→  const ref = useRef<HTMLSpanElement>(null);
+    41→  const started = useRef(false);
+    42→
+    43→  useEffect(() => {
+    44→    const el = ref.current;
+    45→    if (!el) return;
+    46→    const observer = new IntersectionObserver(
+    47→      ([entry]) => {
+    48→        if (entry.isIntersecting && !started.current) {
+    49→          started.current = true;
+    50→          const duration = 1200;
+    51→          const startTime = performance.now();
+    52→          const animate = (now: number) => {
+    53→            const elapsed = now - startTime;
+    54→            const progress = Math.min(elapsed / duration, 1);
+    55→            // ease-out cubic
+    56→            const eased = 1 - Math.pow(1 - progress, 3);
+    57→            setCount(eased * target);
+    58→            if (progress < 1) requestAnimationFrame(animate);
+    59→          };
+    60→          requestAnimationFrame(animate);
+    61→        }
+    62→      },
+    63→      { threshold: 0.1 }
+    64→    );
+    65→    observer.observe(el);
+    66→    return () => observer.disconnect();
+    67→  }, [target]);
+    68→
+    69→  const formatted = decimals > 0
+    70→    ? count.toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+    71→    : Math.round(count).toLocaleString('en-IN');
+    72→
+    73→  return <span ref={ref}>{prefix}{formatted}{suffix}</span>;
+    74→}
+    75→
+    76→// ─── Stat Card ─────────────────────────────────────────────
+    77→const statCards = [
+    78→  {
+    79→    key: 'activeRentals' as const,
+    80→    label: 'Active Rentals',
+    81→    icon: Package,
+    82→    color: 'text-emerald-600',
+    83→    bg: 'bg-emerald-50 dark:bg-emerald-950/40',
+    84→    border: 'border-emerald-200 dark:border-emerald-800',
+    85→    iconBg: 'bg-emerald-100 dark:bg-emerald-900/60',
+    86→    prefix: '',
+    87→    suffix: '',
+    88→  },
+    89→  {
+    90→    key: 'completedRentals' as const,
+    91→    label: 'Completed Rentals',
+    92→    icon: CheckCircle2,
+    93→    color: 'text-sky-600',
+    94→    bg: 'bg-sky-50 dark:bg-sky-950/40',
+    95→    border: 'border-sky-200 dark:border-sky-800',
+    96→    iconBg: 'bg-sky-100 dark:bg-sky-900/60',
+    97→    prefix: '',
+    98→    suffix: '',
+    99→  },
+   100→  {
+   101→    key: 'totalSpending' as const,
+   102→    label: 'Total Spending',
+   103→    icon: IndianRupee,
+   104→    color: 'text-amber-600',
+   105→    bg: 'bg-amber-50 dark:bg-amber-950/40',
+   106→    border: 'border-amber-200 dark:border-amber-800',
+   107→    iconBg: 'bg-amber-100 dark:bg-amber-900/60',
+   108→    prefix: '\u20B9',
+   109→    suffix: '',
+   110→  },
+   111→  {
+   112→    key: 'totalEarnings' as const,
+   113→    label: 'Total Earnings',
+   114→    icon: TrendingUp,
+   115→    color: 'text-violet-600',
+   116→    bg: 'bg-violet-50 dark:bg-violet-950/40',
+   117→    border: 'border-violet-200 dark:border-violet-800',
+   118→    iconBg: 'bg-violet-100 dark:bg-violet-900/60',
+   119→    prefix: '\u20B9',
+   120→    suffix: '',
+   121→  },
+   122→];
+   123→
+   124→// ─── Quick Actions ─────────────────────────────────────────
+   125→const quickActions = [
+   126→  { label: 'Browse Rentals', icon: Search, view: 'marketplace' as const, desc: 'Find items to rent' },
+   127→  { label: 'List an Item', icon: PlusCircle, view: 'list-item' as const, desc: 'Start earning' },
+   128→  { label: 'My Rentals', icon: CalendarClock, view: 'my-rentals' as const, desc: 'Track orders' },
+   129→  { label: 'Messages', icon: MessageSquare, view: 'messages' as const, desc: 'Chat with users' },
+   130→  { label: 'Favorites', icon: Heart, view: 'favorites' as const, desc: 'Saved items' },
+   131→];
+   132→
+   133→// ─── Rental Status Badge ───────────────────────────────────
+   134→const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; className: string }> = {
+   135→  PENDING_PAYMENT: { label: 'Pending Payment', variant: 'outline', className: 'bg-amber-50 text-amber-700 border-amber-200' },
+   136→  PAYMENT_COMPLETED: { label: 'Payment Done', variant: 'default', className: 'bg-blue-100 text-blue-700' },
+   137→  OWNER_PENDING: { label: 'Owner Review', variant: 'outline', className: 'bg-orange-50 text-orange-700 border-orange-200' },
+   138→  OWNER_ACCEPTED: { label: 'Accepted', variant: 'default', className: 'bg-emerald-100 text-emerald-700' },
+   139→  OWNER_REJECTED: { label: 'Rejected', variant: 'destructive', className: '' },
+   140→  READY_FOR_PICKUP: { label: 'Ready for Pickup', variant: 'default', className: 'bg-cyan-100 text-cyan-700' },
+   141→  OUT_FOR_DELIVERY: { label: 'Out for Delivery', variant: 'default', className: 'bg-indigo-100 text-indigo-700' },
+   142→  ACTIVE: { label: 'Active', variant: 'default', className: 'bg-emerald-100 text-emerald-700' },
+   143→  RETURN_PENDING: { label: 'Return Pending', variant: 'outline', className: 'bg-orange-50 text-orange-700 border-orange-200' },
+   144→  RETURNED: { label: 'Returned', variant: 'secondary', className: '' },
+   145→  INSPECTION: { label: 'Inspection', variant: 'outline', className: 'bg-purple-50 text-purple-700 border-purple-200' },
+   146→  COMPLETED: { label: 'Completed', variant: 'default', className: 'bg-sky-100 text-sky-700' },
+   147→  CANCELLED: { label: 'Cancelled', variant: 'destructive', className: '' },
+   148→  DISPUTED: { label: 'Disputed', variant: 'destructive', className: '' },
+   149→  OVERDUE: { label: 'Overdue', variant: 'destructive', className: 'bg-red-100 text-red-700' },
+   150→};
+   151→
+   152→function StatusBadge({ status }: { status: string }) {
+   153→  const config = statusConfig[status] || { label: status, variant: 'outline' as const, className: '' };
+   154→  return (
+   155→    <Badge variant={config.variant} className={`text-xs font-medium ${config.className}`}>
+   156→      {config.label}
+   157→    </Badge>
+   158→  );
+   159→}
+   160→
+   161→// ─── Rental Item Row ───────────────────────────────────────
+   162→function RentalItem({ rental, role }: { rental: Rental; role: 'customer' | 'owner' }) {
+   163→  const navigate = useAppStore((s) => s.navigate);
+   164→  const otherPerson = role === 'customer' ? rental.owner : rental.customer;
+   165→  const product = rental.product as unknown as Rental['product'];
+   166→
+   167→  const startDate = new Date(rental.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+   168→  const endDate = new Date(rental.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+   169→
+   170→  return (
+   171→    <motion.div
+   172→      initial={{ opacity: 0, y: 8 }}
+   173→      animate={{ opacity: 1, y: 0 }}
+   174→      className="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group"
+   175→      onClick={() => navigate('my-rentals', { rentalId: rental.id })}
+   176→    >
+   177→      {/* Product placeholder */}
+   178→      <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center flex-shrink-0">
+   179→        <Package className="w-5 h-5 text-slate-400" />
+   180→      </div>
+   181→
+   182→      {/* Info */}
+   183→      <div className="flex-1 min-w-0">
+   184→        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+   185→          {product.title}
+   186→        </p>
+   187→        <div className="flex items-center gap-2 mt-0.5">
+   188→          <span className="text-xs text-slate-500">{startDate} — {endDate}</span>
+   189→          <span className="text-xs text-slate-300">·</span>
+   190→          <span className="text-xs text-slate-500">{rental.rentalDays} days</span>
+   191→        </div>
+   192→      </div>
+   193→
+   194→      {/* Other person & status */}
+   195→      <div className="flex items-center gap-3 flex-shrink-0">
+   196→        <div className="hidden sm:flex items-center gap-1.5">
+   197→          <Avatar className="w-6 h-6">
+   198→            <AvatarImage src={otherPerson.avatarUrl} />
+   199→            <AvatarFallback className="text-[10px] bg-slate-200 dark:bg-slate-700">
+   200→              {otherPerson.name.charAt(0)}
+   201→            </AvatarFallback>
+   202→          </Avatar>
+   203→          <span className="text-xs text-slate-500 max-w-[80px] truncate">{otherPerson.name}</span>
+   204→        </div>
+   205→        <StatusBadge status={rental.status} />
+   206→        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-500 transition-colors" />
+   207→      </div>
+   208→    </motion.div>
+   209→  );
+   210→}
+   211→
+   212→// ─── Main Dashboard Page ───────────────────────────────────
+   213→export default function DashboardPage() {
+   214→  const user = useAppStore((s) => s.user);
+   215→  const navigate = useAppStore((s) => s.navigate);
+   216→
+   217→  const [stats, setStats] = useState<DashboardStats | null>(null);
+   218→  const [customerRentals, setCustomerRentals] = useState<Rental[]>([]);
+   219→  const [ownerRentals, setOwnerRentals] = useState<Rental[]>([]);
+   220→  const [loading, setLoading] = useState(true);
+   221→  const [error, setError] = useState<string | null>(null);
+   222→
+   223→  const fetchDashboard = useCallback(async () => {
+   224→    setLoading(true);
+   225→    setError(null);
+   226→    try {
+   227→      const [statsRes, custRes, ownRes] = await Promise.allSettled([
+   228→        api.getDashboard(),
+   229→        api.getRentals({ role: 'customer' }),
+   230→        api.getRentals({ role: 'owner' }),
+   231→      ]);
+   232→
+   233→      if (statsRes.status === 'fulfilled') setStats(statsRes.value as unknown as DashboardStats);
+   234→      if (custRes.status === 'fulfilled') setCustomerRentals(custRes.value as unknown as Rental[]);
+   235→      if (ownRes.status === 'fulfilled') setOwnerRentals(ownRes.value as unknown as Rental[]);
+   236→
+   237→      if (statsRes.status === 'rejected' && custRes.status === 'rejected' && ownRes.status === 'rejected') {
+   238→        setError('Failed to load dashboard data');
+   239→      }
+   240→    } catch {
+   241→      setError('Something went wrong');
+   242→    } finally {
+   243→      setLoading(false);
+   244→    }
+   245→  }, []);
+   246→
+   247→  useEffect(() => {
+   248→    fetchDashboard();
+   249→  }, [fetchDashboard]);
+   250→
+   251→  // Derived
+   252→  const pendingRequests = ownerRentals.filter(
+   253→    (r) => r.status === 'OWNER_PENDING' || r.status === 'RETURN_PENDING'
+   254→  );
+   255→  const activeCustomerRentals = customerRentals.filter(
+   256→    (r) => r.status === 'ACTIVE' || r.status === 'OWNER_ACCEPTED' || r.status === 'READY_FOR_PICKUP' || r.status === 'OUT_FOR_DELIVERY'
+   257→  );
+   258→  const recentRentals = [...customerRentals, ...ownerRentals]
+   259→    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+   260→    .slice(0, 5);
+   261→
+   262→  // Unique recent rentals (avoid duplicates when user is both customer and owner)
+   263→  const seen = new Set<string>();
+   264→  const uniqueRecent = recentRentals.filter((r) => {
+   265→    if (seen.has(r.id)) return false;
+   266→    seen.add(r.id);
+   267→    return true;
+   268→  });
+   269→
+   270→  const firstName = user?.name?.split(' ')[0] || 'User';
+   271→  const isOwner = user?.role === 'OWNER' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
+   272→  const kycStatus = user?.kycStatus;
+   273→
+   274→  const currentHour = new Date().getHours();
+   275→  const greeting = currentHour < 12 ? 'Good Morning' : currentHour < 17 ? 'Good Afternoon' : 'Good Evening';
+   276→
+   277→  // Animation variants
+   278→  const containerVariants = {
+   279→    hidden: { opacity: 0 },
+   280→    visible: { opacity: 1, transition: { staggerChildren: 0.08 } },
+   281→  };
+   282→  const itemVariants = {
+   283→    hidden: { opacity: 0, y: 20 },
+   284→    visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
+   285→  };
+   286→
+   287→  if (loading) {
+   288→    return (
+   289→      <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+   290→        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+   291→          {/* Header skeleton */}
+   292→          <div className="flex items-center gap-4 mb-8">
+   293→            <Skeleton className="w-14 h-14 rounded-full" />
+   294→            <div className="space-y-2">
+   295→              <Skeleton className="h-6 w-48" />
+   296→              <Skeleton className="h-4 w-32" />
+   297→            </div>
+   298→          </div>
+   299→          {/* Stats skeleton */}
+   300→          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+   301→            {[...Array(4)].map((_, i) => (
+   302→              <Skeleton key={i} className="h-28 rounded-2xl" />
+   303→            ))}
+   304→          </div>
+   305→          {/* Actions skeleton */}
+   306→          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">
+   307→            {[...Array(5)].map((_, i) => (
+   308→              <Skeleton key={i} className="h-20 rounded-xl" />
+   309→            ))}
+   310→          </div>
+   311→          {/* Rentals skeleton */}
+   312→          <Skeleton className="h-64 rounded-2xl" />
+   313→        </div>
+   314→      </div>
+   315→    );
+   316→  }
+   317→
+   318→  if (error && !stats) {
+   319→    return (
+   320→      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4">
+   321→        <div className="text-center space-y-4">
+   322→          <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto">
+   323→            <AlertTriangle className="w-8 h-8 text-red-500" />
+   324→          </div>
+   325→          <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Failed to load dashboard</h2>
+   326→          <p className="text-slate-500 text-sm max-w-sm">{error}</p>
+   327→          <Button onClick={fetchDashboard} variant="outline" className="mt-2">
+   328→            <Loader2 className="w-4 h-4 mr-2" />Retry
+   329→          </Button>
+   330→        </div>
+   331→      </div>
+   332→    );
+   333→  }
+   334→
+   335→  return (
+   336→    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20 sm:pb-0">
+   337→      <motion.div
+   338→        className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8"
+   339→        variants={containerVariants}
+   340→        initial="hidden"
+   341→        animate="visible"
+   342→      >
+   343→        {/* ─── Welcome Header ──────────────────────────────── */}
+   344→        <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+   345→          <div className="flex items-center gap-4">
+   346→            <Avatar className="w-14 h-14 h-14 ring-2 ring-emerald-500/20 ring-offset-2 ring-offset-background">
+   347→              <AvatarImage src={user?.avatarUrl} alt={user?.name} />
+   348→              <AvatarFallback className="bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-lg font-bold">
+   349→                {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+   350→              </AvatarFallback>
+   351→            </Avatar>
+   352→            <div>
+   353→              <p className="text-sm text-slate-500 dark:text-slate-400">{greeting}</p>
+   354→              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
+   355→                Welcome back, <span className="text-emerald-600 dark:text-emerald-400">{firstName}</span>{'!'}
+   356→              </h1>
+   357→            </div>
+   358→          </div>
+   359→          <div className="flex items-center gap-2">
+   360→            {user?.isVerified && (
+   361→              <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 border-0 gap-1.5">
+   362→                <CheckCircle2 className="w-3.5 h-3.5" />
+   363→                Verified
+   364→              </Badge>
+   365→            )}
+   366→            <Badge variant="outline" className="gap-1.5">
+   367→              <Star className="w-3.5 h-3.5 text-amber-500" />
+   368→              {user?.avgRating?.toFixed(1) || '0.0'}
+   369→            </Badge>
+   370→          </div>
+   371→        </motion.div>
+   372→
+   373→        {/* ─── KYC Status Banner for OWNER ──────────── */}
+   374→        {user?.role === 'OWNER' && kycStatus && kycStatus !== 'VERIFIED' && (
+   375→          <motion.div variants={itemVariants} className="mb-6">
+   376→            <div
+   377→              className={`rounded-2xl p-4 sm:p-5 cursor-pointer transition-all hover:shadow-md ${
+   378→                kycStatus === 'REJECTED'
+   379→                  ? 'bg-red-50 border border-red-200'
+   380→                  : kycStatus === 'SUBMITTED'
+   381→                  ? 'bg-blue-50 border border-blue-200'
+   382→                  : 'bg-amber-50 border border-amber-200'
+   383→              }`}
+   384→              onClick={() => navigate('seller-kyc')}
+   385→            >
+   386→              <div className="flex items-center gap-3">
+   387→                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+   388→                  kycStatus === 'REJECTED' ? 'bg-red-100' : kycStatus === 'SUBMITTED' ? 'bg-blue-100' : 'bg-amber-100'
+   389→                }`}>
+   390→                  <Shield className={`w-5 h-5 ${
+   391→                    kycStatus === 'REJECTED' ? 'text-red-600' : kycStatus === 'SUBMITTED' ? 'text-blue-600' : 'text-amber-600'
+   392→                  }`} />
+   393→                </div>
+   394→                <div className="flex-1 min-w-0">
+   395→                  <h3 className={`text-sm font-semibold ${
+   396→                    kycStatus === 'REJECTED' ? 'text-red-800' : kycStatus === 'SUBMITTED' ? 'text-blue-800' : 'text-amber-800'
+   397→                  }`}>
+   398→                    {kycStatus === 'REJECTED' ? 'KYC Verification Rejected' :
+   399→                     kycStatus === 'SUBMITTED' ? 'KYC Under Review' :
+   400→                     'Complete Seller Verification'}
+   401→                  </h3>
+   402→                  <p className={`text-xs mt-0.5 ${
+   403→                    kycStatus === 'REJECTED' ? 'text-red-600' : kycStatus === 'SUBMITTED' ? 'text-blue-600' : 'text-amber-600'
+   404→                  }`}>
+   405→                    {kycStatus === 'REJECTED' ? 'Your documents were rejected. Tap to review and resubmit.' :
+   406→                     kycStatus === 'SUBMITTED' ? 'Your documents are being reviewed. You\'ll be notified once approved.' :
+   407→                     'Upload Aadhaar, PAN & bank details to start listing items.'}
+   408→                  </p>
+   409→                </div>
+   410→                <ChevronRight className={`w-5 h-5 shrink-0 ${
+   411→                  kycStatus === 'REJECTED' ? 'text-red-400' : kycStatus === 'SUBMITTED' ? 'text-blue-400' : 'text-amber-400'
+   412→                }`} />
+   413→              </div>
+   414→            </div>
+   415→          </motion.div>
+   416→        )}
+   417→
+   418→        {/* ─── Stats Grid ─────────────────────────────────── */}
+   419→        <motion.div variants={itemVariants} className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
+   420→          {statCards.map((stat) => {
+   421→            const value = stats?.[stat.key] ?? 0;
+   422→            const Icon = stat.icon;
+   423→            return (
+   424→              <Card
+   425→                key={stat.key}
+   426→                className={`relative overflow-hidden border ${stat.border} ${stat.bg} hover:shadow-lg transition-shadow duration-300`}
+   427→              >
+   428→                <CardContent className="p-3 sm:p-5">
+   429→                  <div className="flex items-start justify-between">
+   430→                    <div className={`p-2 sm:p-2.5 rounded-xl ${stat.iconBg}`}>
+   431→                      <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${stat.color}`} />
+   432→                    </div>
+   433→                  </div>
+   434→                  <div className="mt-2 sm:mt-3">
+   435→                    <p className={`text-xl sm:text-2xl md:text-3xl font-bold ${stat.color} tracking-tight`}>
+   436→                      <AnimatedCounter
+   437→                        target={value}
+   438→                        prefix={stat.prefix}
+   439→                        suffix={stat.suffix}
+   440→                      />
+   441→                    </p>
+   442→                    <p className="text-[11px] sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 sm:mt-1 font-medium">
+   443→                      {stat.label}
+   444→                    </p>
+   445→                  </div>
+   446→                  {/* Decorative corner glow */}
+   447→                  <div className={`absolute -top-8 -right-8 w-24 h-24 rounded-full ${stat.iconBg} opacity-50 blur-2xl pointer-events-none`} />
+   448→                </CardContent>
+   449→              </Card>
+   450→            );
+   451→          })}
+   452→        </motion.div>
+   453→
+   454→        {/* ─── Quick Actions ───────────────────────────────── */}
+   455→        <motion.div variants={itemVariants} className="mb-8">
+   456→          <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white mb-3 sm:mb-4">Quick Actions</h2>
+   457→          <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+   458→            {quickActions.map((action) => {
+   459→              const Icon = action.icon;
+   460→              return (
+   461→                <motion.button
+   462→                  key={action.view}
+   463→                  whileHover={{ y: -2, scale: 1.02 }}
+   464→                  whileTap={{ scale: 0.98 }}
+   465→                  onClick={() => navigate(action.view)}
+   466→                  className="flex flex-col items-center gap-1.5 sm:gap-2 p-2.5 sm:p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-700 hover:shadow-md transition-all duration-200 group"
+   467→                >
+   468→                  <div className="p-2 sm:p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/40 transition-colors">
+   469→                    <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors" />
+   470→                  </div>
+   471→                  <div className="text-center">
+   472→                    <p className="text-[11px] sm:text-sm font-semibold text-slate-700 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+   473→                      {action.label}
+   474→                    </p>
+   475→                    <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 hidden sm:block">{action.desc}</p>
+   476→                  </div>
+   477→                </motion.button>
+   478→              );
+   479→            })}
+   480→          </div>
+   481→        </motion.div>
+   482→
+   483→        {/* ─── Alerts / Pending ────────────────────────────── */}
+   484→        {pendingRequests.length > 0 && (
+   485→          <motion.div variants={itemVariants} className="mb-8">
+   486→            <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+   487→              <CardContent className="p-4 sm:p-5">
+   488→                <div className="flex items-center gap-3 mb-3">
+   489→                  <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/50">
+   490→                    <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+   491→                  </div>
+   492→                  <div>
+   493→                    <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+   494→                      Pending Requests
+   495→                    </h3>
+   496→                    <p className="text-xs text-amber-600 dark:text-amber-400">
+   497→                      You have {pendingRequests.length} pending action{pendingRequests.length > 1 ? 's' : ''}
+   498→                    </p>
+   499→                  </div>
+   500→                  <Button
+   501→                    variant="outline"
+   502→                    size="sm"
+   503→                    className="ml-auto text-amber-700 border-amber-300 hover:bg-amber-100 dark:text-amber-300 dark:border-amber-700 dark:hover:bg-amber-900/40"
+   504→                    onClick={() => navigate('my-rentals')}
+   505→                  >
+   506→                    View All
+   507→                    <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
+   508→                  </Button>
+   509→                </div>
+   510→                <div className="space-y-1">
+   511→                  {pendingRequests.slice(0, 3).map((rental) => (
+   512→                    <div key={rental.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-white/60 dark:bg-slate-900/40">
+   513→                      <div className="flex items-center gap-3 min-w-0">
+   514→                        <Package className="w-4 h-4 text-amber-500 flex-shrink-0" />
+   515→                        <span className="text-sm text-slate-700 dark:text-slate-300 truncate">
+   516→                          {rental.product.title}
+   517→                        </span>
+   518→                        <span className="text-xs text-slate-400 flex-shrink-0 hidden sm:inline">
+   519→                          by {rental.customer.name}
+   520→                        </span>
+   521→                      </div>
+   522→                      <StatusBadge status={rental.status} />
+   523→                    </div>
+   524→                  ))}
+   525→                </div>
+   526→              </CardContent>
+   527→            </Card>
+   528→          </motion.div>
+   529→        )}
+   530→
+   531→        {/* ─── Active Rentals (Customer) ──────────────────── */}
+   532→        {activeCustomerRentals.length > 0 && (
+   533→          <motion.div variants={itemVariants} className="mb-8">
+   534→            <div className="flex items-center justify-between mb-4">
+   535→              <div className="flex items-center gap-2">
+   536→                <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/40">
+   537→                  <Package className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+   538→                </div>
+   539→                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+   540→                  Active Rentals
+   541→                </h2>
+   542→                <Badge variant="secondary" className="ml-1">{activeCustomerRentals.length}</Badge>
+   543→              </div>
+   544→              <Button
+   545→                variant="ghost"
+   546→                size="sm"
+   547→                className="text-slate-500 hover:text-emerald-600"
+   548→                onClick={() => navigate('my-rentals')}
+   549→              >
+   550→                View All <ChevronRight className="w-4 h-4 ml-0.5" />
+   551→              </Button>
+   552→            </div>
+   553→            <Card className="overflow-hidden">
+   554→              <CardContent className="p-1.5 sm:p-3">
+   555→                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+   556→                  {activeCustomerRentals.slice(0, 3).map((rental) => (
+   557→                    <RentalItem key={rental.id} rental={rental} role="customer" />
+   558→                  ))}
+   559→                </div>
+   560→              </CardContent>
+   561→            </Card>
+   562→          </motion.div>
+   563→        )}
+   564→
+   565→        {/* ─── Owner: Incoming Rentals ────────────────────── */}
+   566→        {isOwner && ownerRentals.length > 0 && (
+   567→          <motion.div variants={itemVariants} className="mb-8">
+   568→            <div className="flex items-center justify-between mb-4">
+   569→              <div className="flex items-center gap-2">
+   570→                <div className="p-1.5 rounded-lg bg-violet-100 dark:bg-violet-900/40">
+   571→                  <Eye className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+   572→                </div>
+   573→                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+   574→                  My Listing Rentals
+   575→                </h2>
+   576→                <Badge variant="secondary" className="ml-1">{ownerRentals.length}</Badge>
+   577→              </div>
+   578→              <Button
+   579→                variant="ghost"
+   580→                size="sm"
+   581→                className="text-slate-500 hover:text-emerald-600"
+   582→                onClick={() => navigate('my-listings')}
+   583→              >
+   584→                View All <ChevronRight className="w-4 h-4 ml-0.5" />
+   585→              </Button>
+   586→            </div>
+   587→            <Card className="overflow-hidden">
+   588→              <CardContent className="p-1.5 sm:p-3">
+   589→                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+   590→                  {ownerRentals.slice(0, 4).map((rental) => (
+   591→                    <RentalItem key={rental.id} rental={rental} role="owner" />
+   592→                  ))}
+   593→                </div>
+   594→              </CardContent>
+   595→            </Card>
+   596→          </motion.div>
+   597→        )}
+   598→
+   599→        {/* ─── Recent Activity ─────────────────────────────── */}
+   600→        {uniqueRecent.length > 0 && (
+   601→          <motion.div variants={itemVariants} className="mb-8">
+   602→            <div className="flex items-center justify-between mb-4">
+   603→              <div className="flex items-center gap-2">
+   604→                <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800">
+   605→                  <Clock className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+   606→                </div>
+   607→                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+   608→                  Recent Activity
+   609→                </h2>
+   610→              </div>
+   611→            </div>
+   612→            <Card className="overflow-hidden">
+   613→              <CardContent className="p-1.5 sm:p-3">
+   614→                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+   615→                  {uniqueRecent.map((rental) => {
+   616→                    const isCustomer = rental.customerId === user?.id;
+   617→                    return (
+   618→                      <RentalItem
+   619→                        key={rental.id}
+   620→                        rental={rental}
+   621→                        role={isCustomer ? 'customer' : 'owner'}
+   622→                      />
+   623→                    );
+   624→                  })}
+   625→                </div>
+   626→              </CardContent>
+   627→            </Card>
+   628→          </motion.div>
+   629→        )}
+   630→
+   631→        {/* ─── Empty State ─────────────────────────────────── */}
+   632→        {!loading && !error && uniqueRecent.length === 0 && activeCustomerRentals.length === 0 && ownerRentals.length === 0 && (
+   633→          <motion.div variants={itemVariants} className="text-center py-12 sm:py-16 pb-24 sm:pb-16">
+   634→            <div className="w-20 h-20 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center mx-auto mb-6">
+   635→              <Package className="w-10 h-10 text-emerald-400" />
+   636→            </div>
+   637→            <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
+   638→              Your dashboard is ready
+   639→            </h3>
+   640→            <p className="text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-6">
+   641→              Start exploring rentals or list your first item to see activity here.
+   642→            </p>
+   643→            <div className="flex items-center justify-center gap-3">
+   644→              <Button onClick={() => navigate('marketplace')} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+   645→                <Search className="w-4 h-4 mr-2" />
+   646→                Browse Rentals
+   647→              </Button>
+   648→              <Button variant="outline" onClick={() => navigate('list-item')}>
+   649→                <PlusCircle className="w-4 h-4 mr-2" />
+   650→                List an Item
+   651→              </Button>
+   652→            </div>
+   653→          </motion.div>
+   654→        )}
+   655→      </motion.div>
+   656→    </div>
+   657→  );
+   658→}
+   659→

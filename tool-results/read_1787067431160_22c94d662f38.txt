@@ -1,0 +1,548 @@
+     1→# RentLoop - Worklog
+     2→
+     3→---
+     4→Task ID: 0
+     5→Agent: Main
+     6→Task: Project initialization and database setup
+     7→
+     8→Work Log:
+     9→- Explored existing project structure
+    10→- Installed bcryptjs, socket.io-client
+    11→- Created comprehensive Prisma schema with 20+ models
+    12→- Pushed schema to SQLite database
+    13→- Generated Prisma client
+    14→
+    15→Stage Summary:
+    16→- Database schema created with User, Product, Rental, Payment, Review, Dispute, Message, etc.
+    17→- Prisma client generated successfully
+    18→
+    19→---
+    20→Task ID: 1
+    21→Agent: Sub-agent (seed-data)
+    22→Task: Create seed data script and populate database
+    23→
+    24→Work Log:
+    25→- Read existing Prisma schema and db import to understand data model
+    26→- Created /home/z/my-project/prisma/seed.ts with comprehensive seed data
+    27→- Fixed escape sequence issue in source file
+    28→- Reset database and ran seed script successfully
+    29→
+    30→Stage Summary:
+    31→- Seed script creates: 10 states, 30 cities, 15 categories, 10 users, 30 products, 20 rentals, 15 reviews, 2 coupons, 10 notifications, 15 favorites
+    32→- All users have bcryptjs-hashed passwords ('password123'), isVerified: true, isActive: true
+    33→- Users include 1 SUPER_ADMIN, 1 ADMIN, 3 OWNERS, 5 CUSTOMERS across multiple states
+    34→- 30 products with realistic Indian rental data, all status APPROVED
+    35→- 20 rentals across all statuses: 3 ACTIVE, 4 COMPLETED, 2 OWNER_PENDING, 2 OWNER_ACCEPTED, 2 RETURN_PENDING, 2 OVERDUE, 2 CANCELLED, 3 PENDING_PAYMENT
+    36→- Active rentals have past start dates and future end dates; overdue rentals have past end dates
+    37→- 2 coupons: SAVE10 (10% off) and FLAT100 (₹100 off)
+    38→- Database seeded and verified successfully
+    39→
+    40→---
+    41→Task ID: 2
+    42→Agent: Main
+    43→Task: Create all backend API routes for RentLoop
+    44→
+    45→Work Log:
+    46→- Created /src/lib/auth.ts with HMAC-SHA256 session system (createSession, verifySession, destroySession, getSession)
+    47→- Created auth routes: register (POST), login (POST), logout (POST), me (GET)
+    48→- Created public routes: states (GET), categories (GET)
+    49→- Created products routes: list/create (GET/POST), detail/update/delete (GET/PATCH/DELETE), favorite toggle (POST), availability check (GET), reviews (GET)
+    50→- Created rentals routes: list/create (GET/POST), detail/status (GET/PATCH), pay (POST), cancel (POST), return (POST), extend (POST), extend respond (POST)
+    51→- Created reviews route (POST) - customer/owner review creation with rating aggregation
+    52→- Created conversations routes: list/create (GET/POST), messages (GET/POST) with read tracking
+    53→- Created notifications route (GET/PATCH) with mark-read and markAll support
+    54→- Created disputes routes: list/create (GET/POST), detail/update (GET/PATCH)
+    55→- Created coupon validate route (POST)
+    56→- Created user dashboard route (GET) with spending/earnings/rental stats
+    57→- Created admin dashboard route (GET) with monthly revenue, rentalsByStatus, usersByRole, productsByCategory
+    58→- Created admin users routes: list (GET) with search/filter/pagination, update (PATCH) with verify/suspend/activate/role actions + audit logs
+    59→- Created admin products routes: list (GET) with status/search filter, update (PATCH) with approve/reject/suspend + audit logs + notifications
+    60→- Created admin rentals routes: list (GET) with status/search filter, update (PATCH) with status changes/refunds/dispute resolution + audit logs
+    61→
+    62→Stage Summary:
+    63→- 33 API route files + 1 auth utility created across 18 endpoint groups
+    64→- All routes use NextRequest/NextResponse from next/server
+    65→- Zod validation on auth register, login, product create, rental create, review create, message create, dispute create, extension request/respond
+    66→- Session system uses in-memory Map with HMAC-SHA256 signed tokens, 7-day expiry
+    67→- Auth via getSession() reading from cookie or Authorization Bearer header
+    68→- All routes have try/catch with proper error responses and status codes
+    69→- Rental creation enforces: server-side price from DB, state matching, availability check, min/max rental days, coupon validation
+    70→- Payment simulation marks COMPLETED and transitions rental to OWNER_PENDING
+    71→- Return flow: customer initiates RETURN_PENDING → owner processes RETURNED/INSPECTION → auto-refund deposit if GOOD condition
+    72→- Extension flow: customer requests → owner approves/rejects → approved creates additional payment
+    73→- Admin actions create AuditLog entries and send notifications to affected users
+    74→- ESLint passes clean, all tested endpoints return correct data
+    75→
+    76→---
+    77→Task ID: 3
+    78→Agent: Main
+    79→Task: Create RentLoop landing page components
+    80→
+    81→Work Log:
+    82→- Read worklog.md, types/index.ts, and store/index.ts for context
+    83→- Created /src/components/rentloop/landing/ directory
+    84→- Created HeroSection.tsx: full-viewport hero with dark navy gradient, gradient text heading, floating Lucide icons (Camera, Laptop, Bike, Drill, Sparkles) animated via Framer Motion, two CTA buttons (Explore Rentals → marketplace, List Your Item → list-item or auth modal), animated stat counters (10K+ Items, 500+ Owners, 25K+ Rentals, 4.9 Rating) with IntersectionObserver
+    85→- Created CategoriesSection.tsx: 15 category cards in responsive grid (5 cols desktop, 3 tablet, 2 mobile), stagger animation, hover scale/shadow, click navigates to marketplace with category filter
+    86→- Created HowItWorksSection.tsx: 4 step cards (Browse, Book, Receive, Return) with step number circles, Lucide icons, connector lines on desktop, stagger whileInView animations
+    87→- Created TrendingSection.tsx: 6 mock product cards with gradient placeholders + Lucide icons, star ratings, ₹ pricing, location badges, Rent Now buttons navigating to product detail
+    88→- Created WhyRentSection.tsx: 6 benefit cards (Save Money, Declutter, Try Before Buy, Access Premium, Eco Friendly, Flexibility) with colored icon containers
+    89→- Created TrustSection.tsx: dark navy section with 4 trust indicators (Verified Owners 500+, Secure Payments 100%, Customer Support 24/7, Satisfaction Rate 98%) with animated counters
+    90→- Created ReviewsSection.tsx: 4 Indian-sounding review cards with star ratings, Avatar component, Quote icon, product badges, realistic review text
+    91→- Created FAQSection.tsx: 8-item Accordion using shadcn Accordion component covering renting, payments, deposits, cancellations, etc.
+    92→- Created CTASection.tsx: final call-to-action with gradient background, glow effects, two buttons (Get Started → register, List Your First Item → list-item)
+    93→- Created LandingPage.tsx: main container rendering all sections in order with scroll-to-top on mount
+    94→- Updated page.tsx to render LandingPage
+    95→- ESLint passes clean, page compiles and renders successfully
+    96→
+    97→Stage Summary:
+    98→- 10 landing page components created in /src/components/rentloop/landing/
+    99→- Navy (#0f172a) / emerald-500 color scheme with white/slate sections
+   100→- All components use 'use client', framer-motion, lucide-react, shadcn/ui
+   101→- Navigation via useAppStore(s => s.navigate)
+   102→- Fully responsive with mobile-first approach
+   103→- No Three.js or React Three Fiber used
+   104→- ESLint clean, dev server compiles successfully
+   105→
+   106→---
+   107→Task ID: 4
+   108→Agent: Main
+   109→Task: Create marketplace and product detail UI components
+   110→
+   111→Work Log:
+   112→- Read worklog.md, types/index.ts, store/index.ts, api.ts, calendar.tsx for context
+   113→- Created /src/components/rentloop/marketplace/ directory
+   114→- Created ProductCard.tsx: product card component with gradient image placeholder using category-specific Lucide icons, hover zoom effect via framer-motion (whileHover y:-4 scale:1.02), category badge, condition badge with color mapping, star rating display, daily price in ₹ (emerald bold) + deposit (muted), location with MapPin, verified owner ShieldCheck badge, favorite Heart toggle with API call, View Details and Rent Now buttons (auth-gated), responsive layout
+   115→- Created MarketplacePage.tsx: full marketplace page with search bar (debounced 400ms), state location selector dropdown (Syncs with store selectedState), sort dropdown (Recommended/Price Low→High/Price High→Low/Highest Rated/Newest/Most Rented), filter popover with condition pills, min/max price inputs, delivery-only Switch, horizontal scrollable category pills, responsive product grid (1/2/3/4 cols), pagination with smart page number windowing, AnimatePresence for grid transitions, loading skeleton, empty state with PackageOpen icon, error state with retry button, location restriction banner, TanStack Query for products/states/categories
+   116→- Created /src/components/rentloop/product/ directory
+   117→- Created ProductDetailPage.tsx: full product detail page with back button, large gradient image placeholder, title/category/condition badges, star rating, price section (daily + weekly with savings badge + deposit + delivery fee), owner info card (Avatar, name, verified badge, rating, total rentals, trust score, Message button), location section with delivery badge, state mismatch warning (disabled rent), tabs (Description/Rental Rules/Cancellation), rental calculator with Calendar date pickers (start/end), real-time calculation breakdown (days, daily rate, rental amount, platform fee 10%, GST 18%, delivery fee, deposit, coupon discount, total), coupon code input with apply mutation, Rent Now CTA with auth/state/availability checks, availability calendar with unavailable date highlighting, reviews section with star breakdown bars and review list with Avatar, loading skeleton, error state
+   118→- Updated page.tsx to render MarketplacePage instead of LandingPage
+   119→- Fixed React Compiler lint errors: replaced useEffect+setState for favorite sync with derived state, replaced useMemo rental calculator with plain function
+   120→- ESLint passes clean, dev server compiles and renders successfully with API calls working
+   121→
+   122→Stage Summary:
+   123→- 3 new components created: ProductCard.tsx, MarketplacePage.tsx, ProductDetailPage.tsx
+   124→- Navy (#0f172a) primary, emerald-600 accent, ₹ pricing throughout
+   125→- TanStack Query for data fetching with proper query keys
+   126→- Framer Motion animations (hover, stagger, fade-in)
+   127→- Full responsive design (mobile-first, 1-4 column grid)
+   128→- Auth gating on favorite/rent actions
+   129→- State-based location filtering with restriction warnings
+   130→- Real-time rental calculator with coupon support
+   131→- ESLint clean, dev server compiles successfully
+   132→
+   133→---
+   134→Task ID: 5
+   135→Agent: Main
+   136→Task: Create RentLoop authentication UI components
+   137→
+   138→Work Log:
+   139→- Read worklog.md, types/index.ts, store/index.ts, api.ts for context
+   140→- Created /src/components/rentloop/auth/ directory
+   141→- Created AuthModal.tsx: modal dialog triggered by store.authModalOpen, two views (login/register) toggled by store.authModalView and tab switcher in navy header bar
+   142→  - Login view: email+password fields with icon prefixes (Mail, Lock), password toggle (Eye/EyeOff), "Forgot Password?" toast link, loading state with Loader2 spinner, error display (server + field-level), success fetches api.me and sets user in store, navigates to returnUrl or marketplace
+   143→  - Register view: Full Name, Email, Phone, Password (min 6), State select (fetched via api.getStates), City select (populated from selected state's cities), PIN Code, Address textarea, Terms checkbox with emerald styling, "Create Account" emerald button, loading/error states
+   144→  - Uses react-hook-form + zodResolver + zod v4 schemas for validation on both forms
+   145→  - Controller used for Select and Checkbox fields
+   146→  - States fetched on mount with loading state
+   147→  - Navy header bar with RentLoop logo and Login/Sign Up toggle pills
+   148→- Created LoginPage.tsx: full-page login with split layout
+   149→  - Left panel (lg+): navy bg (#0f172a) with decorative blur gradients, dot grid pattern, RentLoop logo, "Rent anything, anywhere" tagline with emerald accent, 4 feature cards (Verified Owners, Instant Booking, Flexible Rentals, Top Rated) with staggered framer-motion animations, testimonial card at bottom
+   150→  - Right panel: centered login form with same fields as modal login (email, password, show/hide, forgot password link), "or" divider, sign up link opens auth modal in register view, back to home link
+   151→  - Mobile: full-width form with logo, back link at top
+   152→  - Framer motion fadeInUp and stagger animations throughout
+   153→  - Custom inline LoaderIcon SVG for loading state
+   154→- Updated page.tsx: view router with switch/case for landing, marketplace, product, login views; AuthModal always rendered
+   155→- Created /src/components/Providers.tsx: QueryClientProvider wrapper for TanStack Query
+   156→- Updated layout.tsx: wrapped children + Toaster in Providers
+   157→- Fixed ESLint error: removed synchronous setLoadingStates(true) in useEffect, initialized state to true instead
+   158→- Fixed QueryClient missing error by adding Providers wrapper to layout
+   159→
+   160→Stage Summary:
+   161→- 2 auth components + 1 provider component created
+   162→- AuthModal: dual login/register modal with zod validation, state/city cascading selects, terms checkbox
+   163→- LoginPage: split-layout full-page login with branded left panel, framer-motion animations
+   164→- Navy (#0f172a) primary, emerald-600 accent, consistent with project design system
+   165→- React Hook Form + Zod v4 validation throughout
+   166→- ESLint passes clean (1 warning: react-hook-form watch incompatible-library, expected)
+   167→- Dev server compiles and renders successfully (HTTP 200)
+   168→
+   169→---
+   170→Task ID: 6
+   171→Agent: Main
+   172→Task: Create rentals management and product listing UI components
+   173→
+   174→Work Log:
+   175→- Read worklog.md, types/index.ts, store/index.ts, api.ts for context
+   176→- Read existing DashboardPage.tsx and ProductCard.tsx for coding patterns and style conventions
+   177→- Created /src/components/rentloop/rentals/ directory
+   178→- Created MyRentalsPage.tsx: full rentals page with 7 tabs (All, Upcoming, Active, Returning, Completed, Cancelled, Overdue)
+   179→  - Each tab filters by status mapping (statusToTab record)
+   180→  - Rental cards with gradient thumbnail placeholder, product title, rental period (date-fns format), total ₹ amount, color-coded status badge
+   181→  - Status colors: PENDING_PAYMENT=amber, OWNER_PENDING=amber, OWNER_ACCEPTED=blue, ACTIVE=emerald, RETURN_PENDING=orange, RETURNED=blue, COMPLETED=green, CANCELLED=gray, OVERDUE=red, DISPUTED=red
+   182→  - Context-aware action buttons per status (Pay Now/Cancel, Reject, Start Return/Extend, Confirm Return, Return Now/Contact Owner, Rent Again)
+   183→  - CountdownTimer component updating every second for ACTIVE/OVERDUE rentals
+   184→  - Dual query fetching (role=customer + role=owner) merged and deduplicated by ID
+   185→  - Tab counts with emerald badges for active tab
+   186→  - Loading skeletons, empty state per tab with marketplace CTA
+   187→  - AnimatePresence for card transitions, framer-motion animations
+   188→  - Mutations for pay, cancel, return with toast notifications and query invalidation
+   189→  - Click card opens RentalDetailDialog
+   190→- Created RentalDetailDialog.tsx: full rental detail dialog using shadcn Dialog
+   191→  - Fetches rental by ID with useQuery on open
+   192→  - Product info card (clickable navigates to product detail)
+   193→  - Owner and customer info with Avatar/Fallback
+   194→  - Date range display with rental period
+   195→  - Complete pricing breakdown (rental, platform fee 10%, GST 18%, delivery, discount, deposit, late fee, total)
+   196→  - Status timeline with vertical line, checkmark circles, current/emerald/reached/terminal states
+   197→  - Handles CANCELLED, OVERDUE, DISPUTED, OWNER_REJECTED as terminal states in timeline
+   198→  - Payment history list with type icons, amounts, date, status badges
+   199→  - Extension requests section with status, fee, reason, approve/reject buttons for owners
+   200→  - Full action buttons matching MyRentalsPage (Pay, Cancel, Return, Confirm Return, Rent Again, Contact Owner)
+   201→  - Loading skeleton state
+   202→- Created MyListingsPage.tsx: user's product listings page
+   203→  - Grid layout (1/2/3 cols responsive) of product cards
+   204→  - Each card: gradient image placeholder with category icon, status badge, category badge, title, ₹ price with emerald, star rating, rental count, location, View/Edit/Delete buttons
+   205→  - Status filter tabs: All, Approved, Pending, Rejected, Draft with counts
+   206→  - Delete confirmation using shadcn AlertDialog
+   207→  - Delete mutation with toast and query invalidation
+   208→  - Edit navigates to list-item with product in viewData
+   209→  - View navigates to product detail
+   210→  - Empty states: no listings at all (with "List Your First Item" CTA) vs no results in filtered tab
+   211→  - Loading skeleton grid
+   212→  - "Add New Item" button in header navigates to list-item
+   213→  - Fetches products with ownerId filter
+   214→- Created ListItemPage.tsx: comprehensive product listing form
+   215→  - Zod schema validation with 17 fields (title, categoryId, description, condition, brand, model, purchaseYear, dailyPrice, weeklyPrice, securityDeposit, minRentalDays, maxRentalDays, stateId, cityId, pickupAddress, deliveryAvailable, deliveryFee, rentalRules, cancellationPolicy, ownerNotes)
+   216→  - react-hook-form + zodResolver integration
+   217→  - Controller for Select fields (category, condition, state, city) and Switch (delivery)
+   218→  - Required fields marked with red asterisk
+   219→  - 4 form sections: Basic Information, Pricing, Location, Images, Policies & Rules
+   220→  - Responsive 2-col layout on desktop, 1-col on mobile
+   221→  - State → City cascading select (city clears when state changes)
+   222→  - ₹ prefixed price inputs with IndianRupee icon
+   223→  - Delivery fee input appears when delivery switch is toggled
+   224→  - Image upload placeholder UI (disabled button, dashed border, upload icon)
+   225→  - Edit mode: populates form from viewData.product when navigating from MyListingsPage
+   226→  - Submit mutation calls api.createProduct or api.updateProduct based on mode
+   227→  - Success toast, navigates to my-listings on success
+   228→  - Back/Cancel buttons return to my-listings
+   229→  - Loading state for categories/states fetch
+   230→- Updated page.tsx: added switch cases for my-rentals, my-listings, list-item views
+   231→
+   232→Stage Summary:
+   233→- 4 new components created across /src/components/rentloop/rentals/ and /src/components/rentloop/dashboard/
+   234→- MyRentalsPage: 7-tab rental management with countdown timers, status badges, contextual actions, dual-role fetching
+   235→- RentalDetailDialog: comprehensive rental detail with pricing breakdown, status timeline, payment history, extension management
+   236→- MyListingsPage: product grid with status filtering, CRUD actions, delete confirmation
+   237→- ListItemPage: 17-field form with zod validation, cascading selects, edit mode, image placeholder
+   238→- Navy (#0f172a) / emerald accent consistent with project design system
+   239→- ESLint passes clean (2 warnings: react-hook-form watch incompatible-library, expected)
+   240→- Dev server compiles and renders successfully
+   241→
+   242→---
+   243→Task ID: 7
+   244→Agent: Main
+   245→Task: Create messaging, notifications, favorites, and admin dashboard UI components
+   246→
+   247→Work Log:
+   248→- Read worklog.md, types/index.ts, store/index.ts, api.ts, chart.tsx, ProductCard.tsx, DashboardPage.tsx, MyListingsPage.tsx for context and coding patterns
+   249→- Created /src/components/rentloop/messaging/MessagesPage.tsx: messaging center
+   250→  - Left panel: conversation list with search, user avatars, last message preview, time (date-fns formatDistanceToNow), unread indicator dot
+   251→  - Right panel: selected conversation messages with sender avatars, navy bubble for sent messages, slate bubble for received, read status (Check/CheckCheck icons), timestamps
+   252→  - Message input at bottom with Send button (emerald), Enter key support
+   253→  - Empty state for no conversations: "No conversations yet. Start one from a product page." with Browse Marketplace CTA
+   254→  - Empty state for no chat selected: "Select a conversation" prompt
+   255→  - Responsive: mobile shows list OR chat (not both), back button on chat panel, viewport detection via resize event
+   256→  - useQuery for conversations and messages, useMutation for sendMessage with optimistic update
+   257→  - Auto-scroll to bottom on new messages via ref + useEffect
+   258→  - TanStack Query invalidation on message send (both messages and conversations queries)
+   259→- Created /src/components/rentloop/common/NotificationsPanel.tsx: notifications panel
+   260→  - Supports 'dropdown' and 'fullpage' modes via props
+   261→  - 14 notification type icons with unique icon, color, and background
+   262→  - Notification items show icon, title (bold if unread), message (line-clamp-2), relative time, unread dot
+   263→  - Click notification: marks as read via API, parses data JSON for navigation
+   264→  - Mark all as read button (fullpage header, dropdown inline)
+   265→  - Empty state with BellOff icon, AnimatePresence staggered entry animations
+   266→- Created /src/components/rentloop/dashboard/FavoritesPage.tsx: favorites page
+   267→  - Grid of favorited products (1/2/3/4 cols responsive) reusing ProductCard-style design
+   268→  - FavoriteCard subcomponent with gradient image, category icons, condition badges, ₹ pricing
+   269→  - Fill-red Heart toggle for remove with optimistic removal via onMutate
+   270→  - Empty state: "No favorites yet. Browse the marketplace and save items you like."
+   271→  - AnimatePresence with popLayout for smooth removal animation
+   272→- Created /src/components/rentloop/admin/AdminDashboardPage.tsx: admin analytics
+   273→  - 6 stat cards with AnimatedCounter (IntersectionObserver + rAF cubic ease)
+   274→  - Revenue BarChart (emerald bars) and Rental Status PieChart (donut, 8 colors) using recharts + ChartContainer
+   275→  - Recent rentals table and 4 quick link cards
+   276→- Created /src/components/rentloop/admin/AdminUsersPage.tsx: user management
+   277→  - Table (desktop) / Card (mobile) responsive layout with search, role/status filters, pagination
+   278→  - Actions: Verify, Suspend/Activate, Change Role via DropdownMenu
+   279→  - Expandable row details on desktop
+   280→- Created /src/components/rentloop/admin/AdminProductsPage.tsx: product management
+   281→  - Table (desktop) / Card (mobile) with search, status filter, Approve/Reject/Suspend/Reinstate actions
+   282→- Created /src/components/rentloop/admin/AdminRentalsPage.tsx: rental management
+   283→  - Table (desktop) / Card (mobile) with search, status filter, detail Dialog with pricing breakdown
+   284→  - Status update buttons in dialog
+   285→- Created /src/components/rentloop/admin/AdminDisputesPage.tsx: disputes management
+   286→  - Expandable dispute cards with resolution form (status select, notes textarea) for OPEN/UNDER_REVIEW
+   287→  - 6 status badge colors (OPEN=amber, UNDER_REVIEW=blue, RESOLVED=emerald, REJECTED=red)
+   288→- Updated page.tsx: added all 10 new view routes
+   289→
+   290→Stage Summary:
+   291→- 8 new components created across messaging/, common/, dashboard/, admin/ directories
+   292→- MessagesPage: responsive split-panel messaging with optimistic send, auto-scroll, TanStack Query
+   293→- NotificationsPanel: dual-mode (dropdown/fullpage) with 14 type-specific icons and mark-all-read
+   294→- FavoritesPage: product grid with optimistic remove, AnimatePresence popLayout animations
+   295→- AdminDashboardPage: 6 animated stat cards, recharts BarChart + PieChart, recent rentals table, quick links
+   296→- AdminUsersPage: table/card responsive layout with expandable rows, role/status filters, pagination
+   297→- AdminProductsPage: table/card layout with approve/reject/suspend actions, pagination
+   298→- AdminRentalsPage: table/card layout with detail dialog, pricing breakdown, status updates
+   299→- AdminDisputesPage: expandable dispute list with resolution form for active disputes
+   300→- Navy (#0f172a) / emerald accent, ₹ pricing throughout
+   301→- ESLint passes clean (0 errors, 2 pre-existing react-hook-form watch warnings)
+   302→- Dev server compiles and renders successfully (HTTP 200)
+   303→
+   304→---
+   305→Task ID: 8
+   306→Agent: Main
+   307→Task: Build AppShell (Header, Footer, Mobile Nav), wire everything together, fix bugs
+   308→
+   309→Work Log:
+   310→- Created AppHeader.tsx: sticky header with RentLoop logo, nav links (Home, Explore, Dashboard), state picker dropdown, notification bell with unread count and dropdown panel, user menu dropdown (Dashboard, My Rentals, My Listings, Favorites, Messages, Admin Panel, Logout), mobile hamburger menu via Sheet, login/signup buttons for unauthenticated users
+   311→- Created AppFooter.tsx: 4-column footer (Brand, For Renters, For Owners, Support) with nav links, email/phone, social, copyright
+   312→- Created MobileNav.tsx: 5-tab bottom navigation (Home, Explore, List, Rentals, Profile) with active state highlighting, auth gating
+   313→- Created ErrorBoundary.tsx: class component error boundary with error message display and retry button
+   314→- Updated page.tsx: complete SPA router with all 19 views, header/footer on non-landing views, ErrorBoundary wrapping, auth check on mount, reference data fetching (states, categories)
+   315→- Updated layout.tsx: RentLoop metadata (title, description, keywords, OpenGraph, Twitter cards)
+   316→- Fixed API response format issues: states, categories, rentals, conversations, messages, notifications, disputes APIs were wrapping arrays in objects ({ states: [...] }) but frontend expected plain arrays
+   317→- Fixed products API: added state/city includes, fixed sort name mapping (price_asc/price_desc), fixed Prisma orderBy for recommended sort (array format)
+   318→- Fixed ProductDetailPage: added missing useMemo import
+   319→- Fixed page.tsx: missing closing backtick in template literal
+   320→- Browser verified: landing page, marketplace, product detail, login, dashboard all working
+   321→
+   322→Stage Summary:
+   323→- Full SPA with client-side routing via Zustand store
+   324→- Consistent navy (#0f172a) / emerald design system
+   325→- Responsive design with mobile bottom nav
+   326→- Error boundaries for graceful error handling
+   327→- All core flows verified in browser
+   328→
+   329→---
+   330→Task ID: 9
+   331→Agent: Main
+   332→Task: Fix Rental Calculator section - same-day date selection causing 0-day rental
+   333→
+   334→Work Log:
+   335→- Analyzed user screenshot showing Rental Calculator with disabled Rent Now button, no pricing breakdown, no validation feedback
+   336→- Identified root cause: end date calendar used `disabled={{ before: startDate || today }}` which allowed picking same day as start date (react-day-picker `before` is exclusive, so startDate itself was selectable)
+   337→- Added `addDays` import from date-fns
+   338→- Changed end date calendar disabled to `addDays(startDate!, product?.minRentalDays ? product.minRentalDays : 1)` - this enforces minimum 1-day (or product's minRentalDays) by disabling all dates up to and including the minimum required start date
+   339→- Added `dateValidationError` useMemo that validates: days > 0, respects minRentalDays and maxRentalDays from product
+   340→- Added `isDateValid` derived state used consistently across Rent Now button, coupon input, and Apply button
+   341→- Added red validation error banner (with XCircle icon) that appears when both dates are selected but invalid
+   342→- Improved Rent Now button disabled text: "Select Start Date" → "Select End Date" → error message → "Rent Now"
+   343→- Updated coupon input and Apply button to use `isDateValid` instead of `rentalCalc.days <= 0`
+   344→- Updated `handleRentNow` to check `!isDateValid` instead of `rentalCalc.days <= 0`
+   345→
+   346→Stage Summary:
+   347→- End date calendar now prevents same-day selection and respects product's minRentalDays
+   348→- Clear red validation error shown when dates are invalid (e.g. "End date must be after start date.")
+   349→- Rent Now button shows contextual disabled text (Select Start Date / Select End Date / validation error)
+   350→- Coupon input properly disabled when dates are invalid
+   351→- Browser verified: Aug 20 start → Aug 20 DISABLED in end calendar, Aug 21+ enabled, pricing breakdown appears, green Rent Now button active
+   352→
+   353→---
+   354→Task ID: 10-a
+   355→Agent: Sub-agent
+   356→Task: Fix Rent Now to create rental via API
+   357→
+   358→Work Log:
+   359→- Read ProductDetailPage.tsx to understand existing handleRentNow implementation
+   360→- Identified that handleRentNow only navigated to dashboard with createRental data that DashboardPage never handled
+   361→- Added `useQueryClient` import from @tanstack/react-query
+   362→- Added `Loader2` import from lucide-react
+   363→- Added `toast` import from sonner
+   364→- Added `createRentalMutation` using useMutation that calls api.createRental with productId, startDate, endDate, and optional couponCode
+   365→- On mutation success: shows success toast, invalidates ['rentals'] and ['my-rentals'] queries, navigates to 'my-rentals'
+   366→- On mutation error: shows error toast with server message or fallback
+   367→- Updated handleRentNow to call createRentalMutation.mutate instead of navigate('dashboard', ...)
+   368→- Updated Rent Now button: disabled while mutation is pending, shows Loader2 spinner with "Creating Rental..." text during loading
+   369→- All existing validation checks (auth, stateMismatch, date validity) preserved
+   370→- Ran lint: 0 errors, 2 pre-existing warnings (unrelated)
+   371→
+   372→Stage Summary:
+   373→- Rent Now button now creates a rental via api.createRental API call
+   374→- Rental created with PENDING_PAYMENT status; user navigated to My Rentals to click Pay Now
+   375→- Loading spinner shown during API call, button disabled to prevent double-submit
+   376→- Success/error toasts provide user feedback
+   377→- ['rentals'] and ['my-rentals'] query caches invalidated on success for fresh data
+   378→- Lint passes clean (0 errors)
+   379→
+   380→---
+   381→Task ID: 10-b
+   382→Agent: Sub-agent
+   383→Task: Fix products API to support ownerId filter
+   384→
+   385→Work Log:
+   386→- Read /home/z/my-project/src/app/api/products/route.ts
+   387→- Added `ownerId` extraction from searchParams
+   388→- Replaced hardcoded `where: { status: 'APPROVED' }` with conditional logic: when ownerId is provided, filter by ownerId without status restriction; otherwise keep status APPROVED filter
+   389→
+   390→Stage Summary:
+   391→- MyListingsPage now correctly fetches the owner's own listings across all statuses (including PENDING_REVIEW)
+   392→- Public product listing still returns only APPROVED products
+   393→- Lint passes with 0 errors (2 pre-existing warnings unrelated to this change)
+   394→
+   395→---
+   396→Task ID: $(cat /home/z/my-project/worklog.md | rg -c 'Task ID:' | tail -1)
+   397→Agent: General-purpose
+   398→Task: Add Continue with Google auth (simulated)
+   399→
+   400→Changes Made:
+   401→- Created /src/app/api/auth/google/route.ts – POST endpoint that accepts {email, name, googleId?}, finds or creates user (CUSTOMER role, isVerified, isActive, trustScore 50, random bcrypt password), creates session, returns {user, message}
+   402→- Added googleAuth method to /src/lib/api.ts – calls /api/auth/google with POST
+   403→- Updated /src/components/rentloop/auth/AuthModal.tsx – Added "Continue with Google" button with divider in LoginForm, isGoogleLoading state, handleGoogleLogin handler, inline Google SVG icon
+   404→- Updated /src/components/rentloop/auth/LoginPage.tsx – Added Loader2 import, isGoogleLoading state, handleGoogleLogin handler, Google button with divider before email form, removed redundant "or" divider after form
+   405→
+   406→Stage Summary:
+   407→- Simulated Google OAuth: generates fake email (google_{timestamp}@gmail.com) and name (Google User)
+   408→- No new packages installed
+   409→- Lint passes with 0 errors (2 pre-existing warnings)
+   410→
+   411→---
+   412→Task ID: 10
+   413→Agent: Main
+   414→Task: Remove GST from platform fee calculation
+   415→
+   416→Work Log:
+   417→- Investigated current GST calculation in ProductDetailPage.tsx (frontend) and api/rentals/route.ts (backend)
+   418→- Found GST was calculated on (rentalAmount + platformFee) at 18%
+   419→- Fixed frontend: Changed `const taxableAmount = rentalAmount + platformFee; const tax = Math.round(taxableAmount * 0.18);` to `const tax = Math.round(rentalAmount * 0.18);`
+   420→- Fixed backend: Changed `const tax = (rentalAmount + platformFee - discount) * 0.18;` to `const tax = rentalAmount * 0.18;`
+   421→- Verified both LoginPage and AuthModal already have "Continue with Google" button
+   422→- Verified no lint errors after changes
+   423→- Ran lint check: 0 errors, 2 pre-existing warnings
+   424→
+   425→Stage Summary:
+   426→- GST now calculated only on rentalAmount, not including platform fee
+   427→- Example: ₹200/day × 5 days → Rental ₹1,000, Platform Fee ₹100, GST ₹180 (was ₹198), saving ₹18
+   428→- Both frontend display and backend API calculation are consistent
+   429→
+   430→---
+   431→Task ID: 11-a
+   432→Agent: Sub-agent (area-data)
+   433→Task: Add Area model, types, seed data, and API support
+   434→
+   435→Work Log:
+   436→- Added Area model to Prisma schema with name, cityId, pinCode, isActive, createdAt fields
+   437→- Added @@unique([name, cityId]) constraint on Area model
+   438→- Added areas Area[] relation to City model
+   439→- Added Area interface to TypeScript types (id, name, cityId, pinCode, isActive)
+   440→- Added areas: Area[] field to City interface
+   441→- Populated seed.ts with 8-15 real Indian localities per city for all 30 cities (325 total areas)
+   442→- Used createMany batch insert for area seeding performance
+   443→- Added Areas count to seed completion summary
+   444→- Reset database, pushed schema, regenerated Prisma client, re-seeded successfully
+   445→- Updated /api/states route to include areas in city includes (with isActive filter and name ordering)
+   446→
+   447→Stage Summary:
+   448→- Area model with 325 areas across 30 cities (real Indian locality names with PIN codes)
+   449→- States API now returns nested structure: State → City → Area
+   450→- Types updated for frontend consumption
+   451→
+   452→---
+   453→Task ID: 11-b
+   454→Agent: Sub-agent (cascading-selectors)
+   455→Task: Add State → City → Area cascading selectors
+   456→
+   457→Work Log:
+   458→- Updated Zustand store with selectedCity, setSelectedCity, selectedArea, setSelectedArea
+   459→- Imported City and Area types in store
+   460→- Updated AppHeader: replaced simple state dropdown with cascading State → City → Area Select components on desktop
+   461→- Added mobile location picker as a bottom Sheet with cascading selectors
+   462→- Location badge shows most specific selection (Area > City > State) on mobile
+   463→- Updated MarketplacePage: added City and Area Select dropdowns that appear based on parent selection
+   464→- Added cityId to products API query params when city is selected
+   465→- Cascading reset: state change resets city+area, city change resets area
+   466→- Updated clearFilters to also reset city and area
+   467→- Updated location restriction message to show most specific location
+   468→- Removed unused navigate import from MarketplacePage
+   469→- Products API already supported cityId filtering (no changes needed)
+   470→
+   471→Stage Summary:
+   472→- Users can now drill down: State → City → Area in both header and marketplace
+   473→- Location badge shows most specific selection
+   474→- Products API supports cityId filter
+   475→- Lint passes cleanly
+   476→
+   477→---
+   478→Task ID: 11
+   479→c
+   480→Agent: Main
+   481→Task: Fix rental errors, enhance Google login, add area selection
+   482→
+   483→
+   484→Work Log:
+   485→- Fixed rental API to add console.error logging for all 400 error paths (state mismatch, own product, min/max days, availability)
+   486→- Updated Google login in LoginPage.tsx: replaced auto-generated email with a Gmail input dialog showing email + optional name fields
+   487→- Updated Google login in AuthModal.tsx: same Gmail input dialog approach
+   488→- Added isNotApproved check in ProductDetailPage.tsx to disable Rent Now button for non-APPROVED products
+   489→- Added toast error message when user tries to rent a non-APPROVED product
+   490→- Fixed SWC/Turbopack parsing error caused by orphaned JSX comment (removed comment line 515)
+   491→- Verified states API returns nested State → City → Area data (~325 areas)
+   492→- Verified ESLint passes with 0 errors (2 pre-existing warnings)
+   493→- Verified dev server compiles and serves pages correctly
+   494→
+   495→Stage Summary:
+   496→- Google login now prompts for real Gmail address instead of auto-generating fake email
+   497→- Users can enter their registered Gmail to sign in or create a new account
+   498→- Non-APPROVED products show clear warning and disabled Rent Now button
+   499→- Rental API has diagnostic logging for faster debugging
+   500→- All lint checks pass cleanly
+   501→
+   502→---
+   503→Task ID: 10
+   504→Agent: Main
+   505→Task: Fix Google OAuth / Gmail Authentication
+   506→
+   507→Work Log:
+   508→- Analyzed existing auth implementation (fake Google sign-in with manual email dialog)
+   509→- Created `/api/auth/google/config/route.ts` - Returns whether real Google OAuth is configured
+   510→- Rewrote `/api/auth/google/route.ts` - GET for real OAuth redirect, POST for demo mode
+   511→- Created `/api/auth/google/callback/route.ts` - Handles Google OAuth callback, creates/finds user
+   512→- Updated `src/lib/api.ts` - Added `getGoogleConfig()` and `avatarUrl` support
+   513→- Rewrote `LoginPage.tsx` - Smart OAuth detection, demo mode with Gmail validation, callback handling
+   514→- Updated `AuthModal.tsx` - Same OAuth detection and demo mode in LoginForm
+   515→- Updated `page.tsx` - Added Google OAuth error handling from URL params
+   516→- Verified via browser: Google sign-in dialog opens, accepts Gmail, creates session, logs in user
+   517→
+   518→Stage Summary:
+   519→- Google OAuth fully implemented with dual-mode: real OAuth (when GOOGLE_CLIENT_ID configured) and demo mode (Gmail-only validation)
+   520→- Demo mode validates @gmail.com/@googlemail.com addresses, auto-capitalizes names from email
+   521→- Backend creates user if new, logs in if existing, sets httpOnly session cookie
+   522→- Auth callback route ready for production Google OAuth credentials
+   523→- Browser verified: testuser@gmail.com successfully signed in and redirected to marketplace
+   524→
+   525→---
+   526→Task ID: 11
+   527→Agent: Main + 3 Sub-agents
+   528→Task: IndiaMart-inspired UI redesign
+   529→
+   530→Work Log:
+   531→- Analyzed IndiaMart website design patterns (color scheme, layout, information density)
+   532→- Defined shared design system: Primary #1e40af, Accent #f97316, Background #f8fafc
+   533→- Sub-agent 1: Redesigned AppHeader with IndiaMart-style top utility bar, prominent search bar, category pills, orange CTA
+   534→- Sub-agent 2: Redesigned ProductCard with condition badges, price overlay, owner info, verified badges, orange Rent Now
+   535→- Sub-agent 3: Redesigned all 10 landing page sections (Hero, Categories, Trending, HowItWorks, WhyRent, Trust, Reviews, FAQ, CTA) + AppFooter
+   536→- Rewrote MarketplacePage to match new theme (blue/orange, removed duplicate search, clean filter UI)
+   537→- Fixed template literal parsing issues in JSX (Turbopack/ESLint compatibility)
+   538→- Fixed React Compiler lint error for setState in effect
+   539→- Browser verified: Landing page, Marketplace, Product cards, Header, Footer all render correctly
+   540→
+   541→Stage Summary:
+   542→- Complete IndiaMart-inspired UI redesign across all pages
+   543→- Color scheme: Deep blue (#1e40af) primary, orange (#f97316) CTAs, #f8fafc backgrounds
+   544→- New header: Top utility bar, unified search bar, category pills, orange 'List Item Free' button
+   545→- New product cards: Condition badges, price overlay, owner info with verified badge, orange Rent Now CTA
+   546→- New landing page: Blue gradient hero with search, category grid, trust section, dense footer
+   547→- Lint: 0 errors, 2 pre-existing warnings
+   548→

@@ -1,0 +1,733 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import { useEffect, useRef, useCallback, useState } from 'react';
+     4→     4→import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+     5→     5→import { motion, AnimatePresence } from 'framer-motion';
+     6→     6→import { useForm, Controller, useWatch } from 'react-hook-form';
+     7→     7→import { z } from 'zod';
+     8→     8→import { zodResolver } from '@hookform/resolvers/zod';
+     9→     9→import {
+    10→    10→  ArrowLeft,
+    11→    11→  Upload,
+    12→    12→  X,
+    13→    13→  Loader2,
+    14→    14→  ImageIcon,
+    15→    15→  IndianRupee,
+    16→    16→  GripVertical,
+    17→    17→  ImagePlus,
+    18→    18→} from 'lucide-react';
+    19→    19→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    20→    20→import { Button } from '@/components/ui/button';
+    21→    21→import { Input } from '@/components/ui/input';
+    22→    22→import { Textarea } from '@/components/ui/textarea';
+    23→    23→import { Label } from '@/components/ui/label';
+    24→    24→import { Switch } from '@/components/ui/switch';
+    25→    25→import { Skeleton } from '@/components/ui/skeleton';
+    26→    26→import { Progress } from '@/components/ui/progress';
+    27→    27→import {
+    28→    28→  Select,
+    29→    29→  SelectContent,
+    30→    30→  SelectItem,
+    31→    31→  SelectTrigger,
+    32→    32→  SelectValue,
+    33→    33→} from '@/components/ui/select';
+    34→    34→import { useAppStore } from '@/store';
+    35→    35→import { api } from '@/lib/api';
+    36→    36→import type { Product, Category, State } from '@/types';
+    37→    37→import { toast } from 'sonner';
+    38→    38→
+    39→    39→// ─── Zod Schema ────────────────────────────────────────────
+    40→    40→const productSchema = z.object({
+    41→    41→  title: z.string().min(3, 'Title must be at least 3 characters').max(100),
+    42→    42→  categoryId: z.string().min(1, 'Category is required'),
+    43→    43→  description: z.string().min(10, 'Description must be at least 10 characters').max(2000),
+    44→    44→  condition: z.enum(['NEW', 'LIKE_NEW', 'GOOD', 'FAIR', 'DAMAGED']),
+    45→    45→  brand: z.string().max(100).optional().or(z.literal('')),
+    46→    46→  model: z.string().max(100).optional().or(z.literal('')),
+    47→    47→  purchaseYear: z.string().optional().or(z.literal('')),
+    48→    48→  dailyPrice: z.string().min(1, 'Daily price is required'),
+    49→    49→  weeklyPrice: z.string().optional().or(z.literal('')),
+    50→    50→  securityDeposit: z.string().min(1, 'Security deposit is required'),
+    51→    51→  minRentalDays: z.string().min(1, 'Min rental days is required'),
+    52→    52→  maxRentalDays: z.string().min(1, 'Max rental days is required'),
+    53→    53→  stateId: z.string().min(1, 'State is required'),
+    54→    54→  cityId: z.string().min(1, 'City is required'),
+    55→    55→  pickupAddress: z.string().min(5, 'Pickup address must be at least 5 characters').max(500),
+    56→    56→  deliveryAvailable: z.boolean(),
+    57→    57→  deliveryFee: z.string().optional().or(z.literal('')),
+    58→    58→  rentalRules: z.string().max(2000).optional().or(z.literal('')),
+    59→    59→  cancellationPolicy: z.string().max(2000).optional().or(z.literal('')),
+    60→    60→  ownerNotes: z.string().max(2000).optional().or(z.literal('')),
+    61→    61→});
+    62→    62→
+    63→    63→type ProductFormData = z.infer<typeof productSchema>;
+    64→    64→
+    65→    65→// ─── Condition Options ─────────────────────────────────────
+    66→    66→const conditionOptions = [
+    67→    67→  { value: 'NEW', label: 'New' },
+    68→    68→  { value: 'LIKE_NEW', label: 'Like New' },
+    69→    69→  { value: 'GOOD', label: 'Good' },
+    70→    70→  { value: 'FAIR', label: 'Fair' },
+    71→    71→  { value: 'DAMAGED', label: 'Damaged' },
+    72→    72→];
+    73→    73→
+    74→    74→// ─── Image Type ────────────────────────────────────────────
+    75→    75→interface ImageItem {
+    76→    76→  file?: File;
+    77→    77→  url: string;          // object URL for preview, or server URL for existing
+    78→    78→  serverUrl?: string;   // uploaded URL (starts with /uploads/)
+    79→    79→  uploading?: boolean;
+    80→    80→  progress?: number;
+    81→    81→}
+    82→    82→
+    83→    83→// ─── Section Wrapper ───────────────────────────────────────
+    84→    84→function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
+    85→    85→  return (
+    86→    86→    <Card className="border-slate-200">
+    87→    87→      <CardHeader className="pb-3 pt-4 px-5">
+    88→    88→        <CardTitle className="text-base font-semibold text-slate-900">{title}</CardTitle>
+    89→    89→      </CardHeader>
+    90→    90→      <CardContent className="px-5 pb-5">{children}</CardContent>
+    91→    91→    </Card>
+    92→    92→  );
+    93→    93→}
+    94→    94→
+    95→    95→// ─── Main Page ─────────────────────────────────────────────
+    96→    96→export default function ListItemPage() {
+    97→    97→  const navigate = useAppStore((s) => s.navigate);
+    98→    98→  const viewData = useAppStore((s) => s.viewData);
+    99→    99→  const queryClient = useQueryClient();
+   100→   100→
+   101→   101→  const editingProduct = viewData?.product as Product | undefined;
+   102→   102→  const isEditing = !!editingProduct;
+   103→   103→
+   104→   104→  // ─── Image State ───────────────────────────────
+   105→   105→  const [images, setImages] = useState<ImageItem[]>(() => {
+   106→   106→    if (editingProduct?.images && editingProduct.images.length > 0) {
+   107→   107→      return editingProduct.images.map((img: { url: string; id?: string }) => ({
+   108→   108→        url: img.url,
+   109→   109→        serverUrl: img.url,
+   110→   110→      }));
+   111→   111→    }
+   112→   112→    return [];
+   113→   113→  });
+   114→   114→  const [isDragOver, setIsDragOver] = useState(false);
+   115→   115→  const fileInputRef = useRef<HTMLInputElement>(null);
+   116→   116→
+   117→   117→  // Load existing images when editing
+   118→   118→
+   119→   119→  const MAX_IMAGES = 5;
+   120→   120→  const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+   121→   121→  const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/jpg'];
+   122→   122→
+   123→   123→  const processFiles = useCallback(async (files: FileList | File[]) => {
+   124→   124→    const fileArray = Array.from(files);
+   125→   125→    const remaining = MAX_IMAGES - images.length;
+   126→   126→    if (remaining <= 0) {
+   127→   127→      toast.error(`Maximum ${MAX_IMAGES} images allowed`);
+   128→   128→      return;
+   129→   129→    }
+   130→   130→    const toProcess = fileArray.slice(0, remaining);
+   131→   131→    const validFiles: File[] = [];
+   132→   132→
+   133→   133→    for (const f of toProcess) {
+   134→   134→      if (!ALLOWED_TYPES.includes(f.type)) {
+   135→   135→        toast.error(`"${f.name}" is not a supported format. Use PNG, JPG, or WEBP.`);
+   136→   136→        continue;
+   137→   137→      }
+   138→   138→      if (f.size > MAX_SIZE) {
+   139→   139→        toast.error(`"${f.name}" exceeds 5MB limit`);
+   140→   140→        continue;
+   141→   141→      }
+   142→   142→      validFiles.push(f);
+   143→   143→    }
+   144→   144→
+   145→   145→    if (validFiles.length === 0) return;
+   146→   146→
+   147→   147→    // Add items with uploading state
+   148→   148→    const newItems: ImageItem[] = validFiles.map(f => ({
+   149→   149→      file: f,
+   150→   150→      url: URL.createObjectURL(f),
+   151→   151→      uploading: true,
+   152→   152→      progress: 0,
+   153→   153→    }));
+   154→   154→    setImages(prev => [...prev, ...newItems]);
+   155→   155→
+   156→   156→    // Upload each file
+   157→   157→    for (let i = 0; i < validFiles.length; i++) {
+   158→   158→      const itemIdx = images.length + i;
+   159→   159→      try {
+   160→   160→        // Simulate progress
+   161→   161→        const progressInterval = setInterval(() => {
+   162→   162→          setImages(prev => {
+   163→   163→            const updated = [...prev];
+   164→   164→            if (updated[itemIdx]) {
+   165→   165→              updated[itemIdx] = {
+   166→   166→                ...updated[itemIdx],
+   167→   167→                progress: Math.min((updated[itemIdx].progress || 0) + Math.random() * 30, 90),
+   168→   168→              };
+   169→   169→            }
+   170→   170→            return updated;
+   171→   171→          });
+   172→   172→        }, 200);
+   173→   173→
+   174→   174→        const result = await api.uploadImages([validFiles[i]]);
+   175→   175→
+   176→   176→        clearInterval(progressInterval);
+   177→   177→
+   178→   178→        setImages(prev => {
+   179→   179→          const updated = [...prev];
+   180→   180→          if (updated[itemIdx] && result.urls && result.urls[0]) {
+   181→   181→            updated[itemIdx] = {
+   182→   182→              ...updated[itemIdx],
+   183→   183→              serverUrl: result.urls[0],
+   184→   184→              uploading: false,
+   185→   185→              progress: 100,
+   186→   186→            };
+   187→   187→          }
+   188→   188→          return updated;
+   189→   189→        });
+   190→   190→      } catch {
+   191→   191→        setImages(prev => prev.filter((_, idx) => idx !== itemIdx));
+   192→   192→        toast.error(`Failed to upload "${validFiles[i].name}"`);
+   193→   193→      }
+   194→   194→    }
+   195→   195→  }, [images.length]);
+   196→   196→
+   197→   197→  const handleDragOver = useCallback((e: React.DragEvent) => {
+   198→   198→    e.preventDefault();
+   199→   199→    e.stopPropagation();
+   200→   200→    setIsDragOver(true);
+   201→   201→  }, []);
+   202→   202→
+   203→   203→  const handleDragLeave = useCallback((e: React.DragEvent) => {
+   204→   204→    e.preventDefault();
+   205→   205→    e.stopPropagation();
+   206→   206→    setIsDragOver(false);
+   207→   207→  }, []);
+   208→   208→
+   209→   209→  const handleDrop = useCallback((e: React.DragEvent) => {
+   210→   210→    e.preventDefault();
+   211→   211→    e.stopPropagation();
+   212→   212→    setIsDragOver(false);
+   213→   213→    if (e.dataTransfer.files.length > 0) {
+   214→   214→      processFiles(e.dataTransfer.files);
+   215→   215→    }
+   216→   216→  }, [processFiles]);
+   217→   217→
+   218→   218→  const removeImage = useCallback((index: number) => {
+   219→   219→    setImages(prev => {
+   220→   220→      const item = prev[index];
+   221→   221→      // Revoke object URL if it's a local preview
+   222→   222→      if (item && !item.serverUrl && item.url.startsWith('blob:')) {
+   223→   223→        URL.revokeObjectURL(item.url);
+   224→   224→      }
+   225→   225→      return prev.filter((_, i) => i !== index);
+   226→   226→    });
+   227→   227→  }, []);
+   228→   228→
+   229→   229→  // Fetch categories & states
+   230→   230→  const { data: categories = [], isLoading: loadingCategories } = useQuery({
+   231→   231→    queryKey: ['categories'],
+   232→   232→    queryFn: async () => { const d = await api.getCategories(); return d as unknown as Category[]; },
+   233→   233→  });
+   234→   234→
+   235→   235→  const { data: states = [], isLoading: loadingStates } = useQuery({
+   236→   236→    queryKey: ['states'],
+   237→   237→    queryFn: async () => { const d = await api.getStates(); return d as unknown as State[]; },
+   238→   238→  });
+   239→   239→
+   240→   240→  // Form
+   241→   241→  const form = useForm<ProductFormData>({
+   242→   242→    resolver: zodResolver(productSchema),
+   243→   243→    defaultValues: {
+   244→   244→      title: '',
+   245→   245→      categoryId: '',
+   246→   246→      description: '',
+   247→   247→      condition: 'GOOD',
+   248→   248→      brand: '',
+   249→   249→      model: '',
+   250→   250→      purchaseYear: '',
+   251→   251→      dailyPrice: '',
+   252→   252→      weeklyPrice: '',
+   253→   253→      securityDeposit: '',
+   254→   254→      minRentalDays: '1',
+   255→   255→      maxRentalDays: '30',
+   256→   256→      stateId: '',
+   257→   257→      cityId: '',
+   258→   258→      pickupAddress: '',
+   259→   259→      deliveryAvailable: false,
+   260→   260→      deliveryFee: '',
+   261→   261→      rentalRules: '',
+   262→   262→      cancellationPolicy: '',
+   263→   263→      ownerNotes: '',
+   264→   264→    },
+   265→   265→  });
+   266→   266→
+   267→   267→  const { register, handleSubmit, control, setValue, formState: { errors } } = form;
+   268→   268→  const selectedStateId = useWatch({ control: form.control, name: 'stateId' });
+   269→   269→  const deliveryAvailable = useWatch({ control: form.control, name: 'deliveryAvailable' });
+   270→   270→
+   271→   271→  // Get cities for selected state
+   272→   272→  const selectedState = states.find((s: State) => s.id === selectedStateId);
+   273→   273→  const cities = (selectedState as any)?.cities ?? [];
+   274→   274→
+   275→   275→  // Populate form when editing
+   276→   276→  useEffect(() => {
+   277→   277→    if (editingProduct) {
+   278→   278→      setValue('title', editingProduct.title);
+   279→   279→      setValue('categoryId', editingProduct.categoryId);
+   280→   280→      setValue('description', editingProduct.description || '');
+   281→   281→      setValue('condition', editingProduct.condition);
+   282→   282→      setValue('brand', editingProduct.brand || '');
+   283→   283→      setValue('model', editingProduct.model || '');
+   284→   284→      setValue('purchaseYear', editingProduct.purchaseYear ? String(editingProduct.purchaseYear) : '');
+   285→   285→      setValue('dailyPrice', String(editingProduct.dailyPrice));
+   286→   286→      setValue('weeklyPrice', editingProduct.weeklyPrice ? String(editingProduct.weeklyPrice) : '');
+   287→   287→      setValue('securityDeposit', String(editingProduct.securityDeposit));
+   288→   288→      setValue('minRentalDays', String(editingProduct.minRentalDays));
+   289→   289→      setValue('maxRentalDays', String(editingProduct.maxRentalDays));
+   290→   290→      setValue('stateId', editingProduct.stateId || '');
+   291→   291→      setValue('cityId', editingProduct.cityId || '');
+   292→   292→      setValue('pickupAddress', editingProduct.pickupAddress || '');
+   293→   293→      setValue('deliveryAvailable', editingProduct.deliveryAvailable);
+   294→   294→      setValue('deliveryFee', String(editingProduct.deliveryFee));
+   295→   295→      setValue('rentalRules', editingProduct.rentalRules || '');
+   296→   296→      setValue('cancellationPolicy', editingProduct.cancellationPolicy || '');
+   297→   297→      setValue('ownerNotes', editingProduct.ownerNotes || '');
+   298→   298→    }
+   299→   299→  }, [editingProduct, setValue]);
+   300→   300→
+   301→   301→  // Reset city when state changes
+   302→   302→  useEffect(() => {
+   303→   303→    if (!isEditing || !editingProduct?.cityId) {
+   304→   304→      setValue('cityId', '');
+   305→   305→    }
+   306→   306→  }, [selectedStateId]);
+   307→   307→
+   308→   308→  // Submit mutation
+   309→   309→  const submitMutation = useMutation({
+   310→   310→    mutationFn: async (data: ProductFormData) => {
+   311→   311→      // Wait for any pending uploads
+   312→   312→      const pendingUpload = images.some(img => img.uploading);
+   313→   313→      if (pendingUpload) {
+   314→   314→        throw new Error('Please wait for images to finish uploading');
+   315→   315→      }
+   316→   316→
+   317→   317→      const payload: Record<string, unknown> = {
+   318→   318→        title: data.title,
+   319→   319→        categoryId: data.categoryId,
+   320→   320→        description: data.description,
+   321→   321→        condition: data.condition,
+   322→   322→        brand: data.brand || undefined,
+   323→   323→        model: data.model || undefined,
+   324→   324→        purchaseYear: data.purchaseYear ? parseInt(data.purchaseYear) : undefined,
+   325→   325→        dailyPrice: parseFloat(data.dailyPrice),
+   326→   326→        weeklyPrice: data.weeklyPrice ? parseFloat(data.weeklyPrice) : undefined,
+   327→   327→        securityDeposit: parseFloat(data.securityDeposit),
+   328→   328→        minRentalDays: parseInt(data.minRentalDays),
+   329→   329→        maxRentalDays: parseInt(data.maxRentalDays),
+   330→   330→        stateId: data.stateId,
+   331→   331→        cityId: data.cityId,
+   332→   332→        pickupAddress: data.pickupAddress,
+   333→   333→        deliveryAvailable: data.deliveryAvailable,
+   334→   334→        deliveryFee: data.deliveryFee ? parseFloat(data.deliveryFee) : 0,
+   335→   335→        rentalRules: data.rentalRules || undefined,
+   336→   336→        cancellationPolicy: data.cancellationPolicy || undefined,
+   337→   337→        ownerNotes: data.ownerNotes || undefined,
+   338→   338→      };
+   339→   339→
+   340→   340→      // Attach uploaded image URLs
+   341→   341→      const uploadedUrls = images
+   342→   342→        .filter(img => img.serverUrl)
+   343→   343→        .map(img => img.serverUrl);
+   344→   344→      if (uploadedUrls.length > 0) {
+   345→   345→        payload.imageUrls = uploadedUrls;
+   346→   346→      }
+   347→   347→
+   348→   348→      if (isEditing) {
+   349→   349→        return api.updateProduct(editingProduct.id, payload);
+   350→   350→      }
+   351→   351→      return api.createProduct(payload);
+   352→   352→    },
+   353→   353→    onSuccess: () => {
+   354→   354→      toast.success(isEditing ? 'Listing updated successfully!' : 'Listing created successfully!');
+   355→   355→      queryClient.invalidateQueries({ queryKey: ['my-products'] });
+   356→   356→      queryClient.invalidateQueries({ queryKey: ['products'] });
+   357→   357→      navigate('my-listings');
+   358→   358→    },
+   359→   359→    onError: (e: Error) => toast.error(e.message),
+   360→   360→  });
+   361→   361→
+   362→   362→  const onSubmit = (data: ProductFormData) => {
+   363→   363→    submitMutation.mutate(data);
+   364→   364→  };
+   365→   365→
+   366→   366→  const isSubmitting = submitMutation.isPending;
+   367→   367→  const isLoadingData = loadingCategories || loadingStates;
+   368→   368→  const hasUploadingImages = images.some(img => img.uploading);
+   369→   369→
+   370→   370→  return (
+   371→   371→    <div className="min-h-screen bg-slate-50">
+   372→   372→      {/* Header */}
+   373→   373→      <div className="bg-white border-b border-slate-200 sticky top-0 z-30">
+   374→   374→        <div className="max-w-4xl mx-auto px-4 sm:px-6">
+   375→   375→          <div className="flex items-center justify-between h-16">
+   376→   376→            <div className="flex items-center gap-3">
+   377→   377→              <Button variant="ghost" size="sm" className="text-slate-600 hover:text-slate-900" onClick={() => navigate('my-listings')}>
+   378→   378→                <ArrowLeft className="h-4 w-4 mr-1" />Back
+   379→   379→              </Button>
+   380→   380→              <div className="h-6 w-px bg-slate-200" />
+   381→   381→              <h1 className="text-lg font-bold text-slate-900">{isEditing ? 'Edit Listing' : 'List a New Item'}</h1>
+   382→   382→            </div>
+   383→   383→          </div>
+   384→   384→        </div>
+   385→   385→      </div>
+   386→   386→
+   387→   387→      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+   388→   388→        {isLoadingData ? (
+   389→   389→          <div className="space-y-6">
+   390→   390→            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-48 w-full rounded-xl" />)}
+   391→   391→          </div>
+   392→   392→        ) : (
+   393→   393→          <motion.form
+   394→   394→            initial={{ opacity: 0, y: 16 }}
+   395→   395→            animate={{ opacity: 1, y: 0 }}
+   396→   396→            onSubmit={handleSubmit(onSubmit)}
+   397→   397→            className="space-y-6"
+   398→   398→          >
+   399→   399→            {/* Basic Information */}
+   400→   400→            <FormSection title="Basic Information">
+   401→   401→              <div className="space-y-4">
+   402→   402→                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   403→   403→                  <div className="md:col-span-2">
+   404→   404→                    <Label htmlFor="title" className="text-sm font-medium text-slate-700">
+   405→   405→                      Product Title <span className="text-red-500">*</span>
+   406→   406→                    </Label>
+   407→   407→                    <Input id="title" placeholder="e.g., Canon EOS R5 Camera" className="mt-1.5" {...register('title')} />
+   408→   408→                    {errors.title && <p className="text-xs text-red-500 mt-1">{errors.title.message}</p>}
+   409→   409→                  </div>
+   410→   410→
+   411→   411→                  <div>
+   412→   412→                    <Label className="text-sm font-medium text-slate-700">Category <span className="text-red-500">*</span></Label>
+   413→   413→                    <Controller
+   414→   414→                      name="categoryId"
+   415→   415→                      control={control}
+   416→   416→                      render={({ field }) => (
+   417→   417→                        <Select value={field.value} onValueChange={field.onChange}>
+   418→   418→                          <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select category" /></SelectTrigger>
+   419→   419→                          <SelectContent>
+   420→   420→                            {categories.map((cat) => (
+   421→   421→                              <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+   422→   422→                            ))}
+   423→   423→                          </SelectContent>
+   424→   424→                        </Select>
+   425→   425→                      )}
+   426→   426→                    />
+   427→   427→                    {errors.categoryId && <p className="text-xs text-red-500 mt-1">{errors.categoryId.message}</p>}
+   428→   428→                  </div>
+   429→   429→
+   430→   430→                  <div>
+   431→   431→                    <Label className="text-sm font-medium text-slate-700">Condition <span className="text-red-500">*</span></Label>
+   432→   432→                    <Controller
+   433→   433→                      name="condition"
+   434→   434→                      control={control}
+   435→   435→                      render={({ field }) => (
+   436→   436→                        <Select value={field.value} onValueChange={field.onChange}>
+   437→   437→                          <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+   438→   438→                          <SelectContent>
+   439→   439→                            {conditionOptions.map((opt) => (
+   440→   440→                              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+   441→   441→                            ))}
+   442→   442→                          </SelectContent>
+   443→   443→                        </Select>
+   444→   444→                      )}
+   445→   445→                    />
+   446→   446→                  </div>
+   447→   447→                </div>
+   448→   448→
+   449→   449→                <div>
+   450→   450→                  <Label htmlFor="description" className="text-sm font-medium text-slate-700">
+   451→   451→                    Description <span className="text-red-500">*</span>
+   452→   452→                  </Label>
+   453→   453→                  <Textarea id="description" placeholder="Describe your item in detail..." rows={4} className="mt-1.5 resize-none" {...register('description')} />
+   454→   454→                  {errors.description && <p className="text-xs text-red-500 mt-1">{errors.description.message}</p>}
+   455→   455→                </div>
+   456→   456→
+   457→   457→                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   458→   458→                  <div>
+   459→   459→                    <Label htmlFor="brand" className="text-sm font-medium text-slate-700">Brand</Label>
+   460→   460→                    <Input id="brand" placeholder="e.g., Canon" className="mt-1.5" {...register('brand')} />
+   461→   461→                  </div>
+   462→   462→                  <div>
+   463→   463→                    <Label htmlFor="model" className="text-sm font-medium text-slate-700">Model</Label>
+   464→   464→                    <Input id="model" placeholder="e.g., EOS R5" className="mt-1.5" {...register('model')} />
+   465→   465→                  </div>
+   466→   466→                  <div>
+   467→   467→                    <Label htmlFor="purchaseYear" className="text-sm font-medium text-slate-700">Purchase Year</Label>
+   468→   468→                    <Input id="purchaseYear" placeholder="e.g., 2023" className="mt-1.5" {...register('purchaseYear')} />
+   469→   469→                  </div>
+   470→   470→                </div>
+   471→   471→              </div>
+   472→   472→            </FormSection>
+   473→   473→
+   474→   474→            {/* Pricing */}
+   475→   475→            <FormSection title="Pricing">
+   476→   476→              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   477→   477→                <div>
+   478→   478→                  <Label htmlFor="dailyPrice" className="text-sm font-medium text-slate-700">Daily Price (₹) <span className="text-red-500">*</span></Label>
+   479→   479→                  <div className="relative mt-1.5">
+   480→   480→                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+   481→   481→                    <Input id="dailyPrice" placeholder="0" className="pl-9" {...register('dailyPrice')} />
+   482→   482→                  </div>
+   483→   483→                  {errors.dailyPrice && <p className="text-xs text-red-500 mt-1">{errors.dailyPrice.message}</p>}
+   484→   484→                </div>
+   485→   485→                <div>
+   486→   486→                  <Label htmlFor="weeklyPrice" className="text-sm font-medium text-slate-700">Weekly Price (₹)</Label>
+   487→   487→                  <div className="relative mt-1.5">
+   488→   488→                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+   489→   489→                    <Input id="weeklyPrice" placeholder="Optional" className="pl-9" {...register('weeklyPrice')} />
+   490→   490→                  </div>
+   491→   491→                </div>
+   492→   492→                <div>
+   493→   493→                  <Label htmlFor="securityDeposit" className="text-sm font-medium text-slate-700">Security Deposit (₹) <span className="text-red-500">*</span></Label>
+   494→   494→                  <div className="relative mt-1.5">
+   495→   495→                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+   496→   496→                    <Input id="securityDeposit" placeholder="0" className="pl-9" {...register('securityDeposit')} />
+   497→   497→                  </div>
+   498→   498→                  {errors.securityDeposit && <p className="text-xs text-red-500 mt-1">{errors.securityDeposit.message}</p>}
+   499→   499→                </div>
+   500→   500→                <div className="grid grid-cols-2 gap-4">
+   501→   501→                  <div>
+   502→   502→                    <Label htmlFor="minRentalDays" className="text-sm font-medium text-slate-700">Min Days <span className="text-red-500">*</span></Label>
+   503→   503→                    <Input id="minRentalDays" type="number" min="1" className="mt-1.5" {...register('minRentalDays')} />
+   504→   504→                    {errors.minRentalDays && <p className="text-xs text-red-500 mt-1">{errors.minRentalDays.message}</p>}
+   505→   505→                  </div>
+   506→   506→                  <div>
+   507→   507→                    <Label htmlFor="maxRentalDays" className="text-sm font-medium text-slate-700">Max Days <span className="text-red-500">*</span></Label>
+   508→   508→                    <Input id="maxRentalDays" type="number" min="1" className="mt-1.5" {...register('maxRentalDays')} />
+   509→   509→                    {errors.maxRentalDays && <p className="text-xs text-red-500 mt-1">{errors.maxRentalDays.message}</p>}
+   510→   510→                  </div>
+   511→   511→                </div>
+   512→   512→              </div>
+   513→   513→            </FormSection>
+   514→   514→
+   515→   515→            {/* Location */}
+   516→   516→            <FormSection title="Location">
+   517→   517→              <div className="space-y-4">
+   518→   518→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   519→   519→                  <div>
+   520→   520→                    <Label className="text-sm font-medium text-slate-700">State <span className="text-red-500">*</span></Label>
+   521→   521→                    <Controller
+   522→   522→                      name="stateId"
+   523→   523→                      control={control}
+   524→   524→                      render={({ field }) => (
+   525→   525→                        <Select value={field.value} onValueChange={(v) => { field.onChange(v); setValue('cityId', ''); }}>
+   526→   526→                          <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select state" /></SelectTrigger>
+   527→   527→                          <SelectContent>
+   528→   528→                            {states.map((s) => (
+   529→   529→                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+   530→   530→                            ))}
+   531→   531→                          </SelectContent>
+   532→   532→                        </Select>
+   533→   533→                      )}
+   534→   534→                    />
+   535→   535→                    {errors.stateId && <p className="text-xs text-red-500 mt-1">{errors.stateId.message}</p>}
+   536→   536→                  </div>
+   537→   537→
+   538→   538→                  <div>
+   539→   539→                    <Label className="text-sm font-medium text-slate-700">City <span className="text-red-500">*</span></Label>
+   540→   540→                    <Controller
+   541→   541→                      name="cityId"
+   542→   542→                      control={control}
+   543→   543→                      render={({ field }) => (
+   544→   544→                        <Select value={field.value} onValueChange={field.onChange} disabled={!selectedStateId}>
+   545→   545→                          <SelectTrigger className="mt-1.5"><SelectValue placeholder={selectedStateId ? 'Select city' : 'Select state first'} /></SelectTrigger>
+   546→   546→                          <SelectContent>
+   547→   547→                            {cities.map((c: { id: string; name: string }) => (
+   548→   548→                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+   549→   549→                            ))}
+   550→   550→                          </SelectContent>
+   551→   551→                        </Select>
+   552→   552→                      )}
+   553→   553→                    />
+   554→   554→                    {errors.cityId && <p className="text-xs text-red-500 mt-1">{errors.cityId.message}</p>}
+   555→   555→                  </div>
+   556→   556→                </div>
+   557→   557→
+   558→   558→                <div>
+   559→   559→                  <Label htmlFor="pickupAddress" className="text-sm font-medium text-slate-700">Pickup Address <span className="text-red-500">*</span></Label>
+   560→   560→                  <Textarea id="pickupAddress" placeholder="Full pickup address..." rows={2} className="mt-1.5 resize-none" {...register('pickupAddress')} />
+   561→   561→                  {errors.pickupAddress && <p className="text-xs text-red-500 mt-1">{errors.pickupAddress.message}</p>}
+   562→   562→                </div>
+   563→   563→
+   564→   564→                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+   565→   565→                  <Controller
+   566→   566→                    name="deliveryAvailable"
+   567→   567→                    control={control}
+   568→   568→                    render={({ field }) => (
+   569→   569→                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+   570→   570→                    )}
+   571→   571→                  />
+   572→   572→                  <Label className="text-sm font-medium text-slate-700 cursor-pointer" onClick={() => setValue('deliveryAvailable', !deliveryAvailable)}>
+   573→   573→                    Delivery Available
+   574→   574→                  </Label>
+   575→   575→                  {deliveryAvailable && (
+   576→   576→                    <div className="relative ml-auto">
+   577→   577→                      <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+   578→   578→                      <Input placeholder="Delivery fee" className="w-32 pl-9 h-9" {...register('deliveryFee')} />
+   579→   579→                    </div>
+   580→   580→                  )}
+   581→   581→                </div>
+   582→   582→              </div>
+   583→   583→            </FormSection>
+   584→   584→
+   585→   585→            {/* Images */}
+   586→   586→            <FormSection title="Images">
+   587→   587→              <div className="space-y-4">
+   588→   588→                {/* Image Previews */}
+   589→   589→                <AnimatePresence mode="popLayout">
+   590→   590→                  {images.length > 0 && (
+   591→   591→                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+   592→   592→                      {images.map((img, idx) => (
+   593→   593→                        <motion.div
+   594→   594→                          key={`${img.url}-${idx}`}
+   595→   595→                          layout
+   596→   596→                          initial={{ opacity: 0, scale: 0.8 }}
+   597→   597→                          animate={{ opacity: 1, scale: 1 }}
+   598→   598→                          exit={{ opacity: 0, scale: 0.8 }}
+   599→   599→                          className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-100"
+   600→   600→                        >
+   601→   601→                          <img
+   602→   602→                            src={img.url}
+   603→   603→                            alt={`Product ${idx + 1}`}
+   604→   604→                            className="w-full h-full object-cover"
+   605→   605→                          />
+   606→   606→                          {/* Upload overlay */}
+   607→   607→                          {img.uploading && (
+   608→   608→                            <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-2">
+   609→   609→                              <Loader2 className="h-5 w-5 text-white animate-spin" />
+   610→   610→                              <Progress value={img.progress || 0} className="w-16 h-1.5" />
+   611→   611→                              <span className="text-[10px] text-white/80">{Math.round(img.progress || 0)}%</span>
+   612→   612→                            </div>
+   613→   613→                          )}
+   614→   614→                          {/* First image badge */}
+   615→   615→                          {idx === 0 && !img.uploading && (
+   616→   616→                            <div className="absolute top-1 left-1 bg-emerald-600 text-white text-[10px] font-medium px-1.5 py-0.5 rounded">Cover</div>
+   617→   617→                          )}
+   618→   618→                          {/* Remove button */}
+   619→   619→                          {!img.uploading && (
+   620→   620→                            <button
+   621→   621→                              type="button"
+   622→   622→                              onClick={() => removeImage(idx)}
+   623→   623→                              className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 hover:bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+   624→   624→                            >
+   625→   625→                              <X className="h-3.5 w-3.5" />
+   626→   626→                            </button>
+   627→   627→                          )}
+   628→   628→                        </motion.div>
+   629→   629→                      ))}
+   630→   630→
+   631→   631→                      {/* Add more button */}
+   632→   632→                      {images.length < MAX_IMAGES && !hasUploadingImages && (
+   633→   633→                        <motion.button
+   634→   634→                          type="button"
+   635→   635→                          initial={{ opacity: 0, scale: 0.8 }}
+   636→   636→                          animate={{ opacity: 1, scale: 1 }}
+   637→   637→                          onClick={() => fileInputRef.current?.click()}
+   638→   638→                          className="aspect-square rounded-lg border-2 border-dashed border-slate-300 hover:border-emerald-400 hover:bg-emerald-50/30 flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer"
+   639→   639→                        >
+   640→   640→                          <ImagePlus className="h-5 w-5 text-slate-400" />
+   641→   641→                          <span className="text-[10px] text-slate-400 font-medium">Add</span>
+   642→   642→                        </motion.button>
+   643→   643→                      )}
+   644→   644→                    </div>
+   645→   645→                  )}
+   646→   646→                </AnimatePresence>
+   647→   647→
+   648→   648→                {/* Drop Zone (shown when no images) */}
+   649→   649→                {images.length === 0 && (
+   650→   650→                  <div
+   651→   651→                    onDragOver={handleDragOver}
+   652→   652→                    onDragLeave={handleDragLeave}
+   653→   653→                    onDrop={handleDrop}
+   654→   654→                    onClick={() => fileInputRef.current?.click()}
+   655→   655→                    className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center text-center transition-colors cursor-pointer ${
+   656→   656→                      isDragOver
+   657→   657→                        ? 'border-emerald-500 bg-emerald-50/50'
+   658→   658→                        : 'border-slate-300 hover:border-emerald-400 hover:bg-emerald-50/30'
+   659→   659→                    }`}
+   660→   660→                  >
+   661→   661→                    <div className="h-12 w-12 rounded-full bg-emerald-50 flex items-center justify-center mb-3">
+   662→   662→                      <Upload className="h-6 w-6 text-emerald-600" />
+   663→   663→                    </div>
+   664→   664→                    <p className="text-sm font-medium text-slate-700">Drag & drop images here, or click to browse</p>
+   665→   665→                    <p className="text-xs text-slate-400 mt-1">PNG, JPG, WEBP up to 5MB each (max {MAX_IMAGES} images)</p>
+   666→   666→                    <Button type="button" variant="outline" size="sm" className="mt-3 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+   667→   667→                      <ImageIcon className="h-4 w-4 mr-1.5" />
+   668→   668→                      Choose Files
+   669→   669→                    </Button>
+   670→   670→                  </div>
+   671→   671→                )}
+   672→   672→
+   673→   673→                {/* Hidden file input */}
+   674→   674→                <input
+   675→   675→                  ref={fileInputRef}
+   676→   676→                  type="file"
+   677→   677→                  accept="image/png,image/jpeg,image/webp"
+   678→   678→                  multiple
+   679→   679→                  className="hidden"
+   680→   680→                  onChange={(e) => {
+   681→   681→                    if (e.target.files) processFiles(e.target.files);
+   682→   682→                    e.target.value = '';
+   683→   683→                  }}
+   684→   684→                />
+   685→   685→
+   686→   686→                <p className="text-xs text-slate-400">{images.length}/{MAX_IMAGES} images uploaded. First image will be the cover photo.</p>
+   687→   687→              </div>
+   688→   688→            </FormSection>
+   689→   689→
+   690→   690→            {/* Policies */}
+   691→   691→            <FormSection title="Policies & Rules">
+   692→   692→              <div className="space-y-4">
+   693→   693→                <div>
+   694→   694→                  <Label htmlFor="rentalRules" className="text-sm font-medium text-slate-700">Rental Rules</Label>
+   695→   695→                  <Textarea id="rentalRules" placeholder="e.g., No smoking near the item, handle with care..." rows={3} className="mt-1.5 resize-none" {...register('rentalRules')} />
+   696→   696→                </div>
+   697→   697→                <div>
+   698→   698→                  <Label htmlFor="cancellationPolicy" className="text-sm font-medium text-slate-700">Cancellation Policy</Label>
+   699→   699→                  <Textarea id="cancellationPolicy" placeholder="e.g., Free cancellation 24 hours before start date..." rows={3} className="mt-1.5 resize-none" {...register('cancellationPolicy')} />
+   700→   700→                </div>
+   701→   701→                <div>
+   702→   702→                  <Label htmlFor="ownerNotes" className="text-sm font-medium text-slate-700">Owner Notes</Label>
+   703→   703→                  <Textarea id="ownerNotes" placeholder="Any additional notes for renters..." rows={3} className="mt-1.5 resize-none" {...register('ownerNotes')} />
+   704→   704→                </div>
+   705→   705→              </div>
+   706→   706→            </FormSection>
+   707→   707→
+   708→   708→            {/* Submit */}
+   709→   709→            <div className="flex items-center justify-between pb-8">
+   710→   710→              <Button type="button" variant="outline" className="text-slate-600" onClick={() => navigate('my-listings')}>
+   711→   711→                Cancel
+   712→   712→              </Button>
+   713→   713→              <Button
+   714→   714→                type="submit"
+   715→   715→                className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[160px]"
+   716→   716→                disabled={isSubmitting || hasUploadingImages}
+   717→   717→              >
+   718→   718→                {isSubmitting ? (
+   719→   719→                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />{isEditing ? 'Updating...' : 'Creating...'}</>
+   720→   720→                ) : hasUploadingImages ? (
+   721→   721→                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />Uploading images...</>
+   722→   722→                ) : (
+   723→   723→                  <>{isEditing ? 'Update Listing' : 'Create Listing'}</>
+   724→   724→                )}
+   725→   725→              </Button>
+   726→   726→            </div>
+   727→   727→          </motion.form>
+   728→   728→        )}
+   729→   729→      </div>
+   730→   730→    </div>
+   731→   731→  );
+   732→   732→}
+   733→   733→

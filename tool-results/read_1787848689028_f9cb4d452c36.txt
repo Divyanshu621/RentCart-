@@ -1,0 +1,732 @@
+     1→'use client';
+     2→
+     3→import { useEffect, useRef, useCallback, useState } from 'react';
+     4→import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+     5→import { motion, AnimatePresence } from 'framer-motion';
+     6→import { useForm, Controller, useWatch } from 'react-hook-form';
+     7→import { z } from 'zod';
+     8→import { zodResolver } from '@hookform/resolvers/zod';
+     9→import {
+    10→  ArrowLeft,
+    11→  Upload,
+    12→  X,
+    13→  Loader2,
+    14→  ImageIcon,
+    15→  IndianRupee,
+    16→  ImagePlus,
+    17→} from 'lucide-react';
+    18→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    19→import { Button } from '@/components/ui/button';
+    20→import { Input } from '@/components/ui/input';
+    21→import { Textarea } from '@/components/ui/textarea';
+    22→import { Label } from '@/components/ui/label';
+    23→import { Switch } from '@/components/ui/switch';
+    24→import { Skeleton } from '@/components/ui/skeleton';
+    25→import { Progress } from '@/components/ui/progress';
+    26→import {
+    27→  Select,
+    28→  SelectContent,
+    29→  SelectItem,
+    30→  SelectTrigger,
+    31→  SelectValue,
+    32→} from '@/components/ui/select';
+    33→import { useAppStore } from '@/store';
+    34→import { api } from '@/lib/api';
+    35→import type { Product, Category, State } from '@/types';
+    36→import { toast } from 'sonner';
+    37→
+    38→// ─── Zod Schema ────────────────────────────────────────────
+    39→const productSchema = z.object({
+    40→  title: z.string().min(3, 'Title must be at least 3 characters').max(100),
+    41→  categoryId: z.string().min(1, 'Category is required'),
+    42→  description: z.string().min(10, 'Description must be at least 10 characters').max(2000),
+    43→  condition: z.enum(['NEW', 'LIKE_NEW', 'GOOD', 'FAIR', 'DAMAGED']),
+    44→  brand: z.string().max(100).optional().or(z.literal('')),
+    45→  model: z.string().max(100).optional().or(z.literal('')),
+    46→  purchaseYear: z.string().optional().or(z.literal('')),
+    47→  dailyPrice: z.string().min(1, 'Daily price is required'),
+    48→  weeklyPrice: z.string().optional().or(z.literal('')),
+    49→  securityDeposit: z.string().min(1, 'Security deposit is required'),
+    50→  minRentalDays: z.string().min(1, 'Min rental days is required'),
+    51→  maxRentalDays: z.string().min(1, 'Max rental days is required'),
+    52→  stateId: z.string().min(1, 'State is required'),
+    53→  cityId: z.string().min(1, 'City is required'),
+    54→  pickupAddress: z.string().min(5, 'Pickup address must be at least 5 characters').max(500),
+    55→  deliveryAvailable: z.boolean(),
+    56→  deliveryFee: z.string().optional().or(z.literal('')),
+    57→  rentalRules: z.string().max(2000).optional().or(z.literal('')),
+    58→  cancellationPolicy: z.string().max(2000).optional().or(z.literal('')),
+    59→  ownerNotes: z.string().max(2000).optional().or(z.literal('')),
+    60→});
+    61→
+    62→type ProductFormData = z.infer<typeof productSchema>;
+    63→
+    64→// ─── Condition Options ─────────────────────────────────────
+    65→const conditionOptions = [
+    66→  { value: 'NEW', label: 'New' },
+    67→  { value: 'LIKE_NEW', label: 'Like New' },
+    68→  { value: 'GOOD', label: 'Good' },
+    69→  { value: 'FAIR', label: 'Fair' },
+    70→  { value: 'DAMAGED', label: 'Damaged' },
+    71→];
+    72→
+    73→// ─── Image Type ────────────────────────────────────────────
+    74→interface ImageItem {
+    75→  file?: File;
+    76→  url: string;          // object URL for preview, or server URL for existing
+    77→  serverUrl?: string;   // uploaded URL (starts with /uploads/)
+    78→  uploading?: boolean;
+    79→  progress?: number;
+    80→}
+    81→
+    82→// ─── Section Wrapper ───────────────────────────────────────
+    83→function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
+    84→  return (
+    85→    <Card className="border-slate-200">
+    86→      <CardHeader className="pb-3 pt-4 px-5">
+    87→        <CardTitle className="text-base font-semibold text-slate-900">{title}</CardTitle>
+    88→      </CardHeader>
+    89→      <CardContent className="px-5 pb-5">{children}</CardContent>
+    90→    </Card>
+    91→  );
+    92→}
+    93→
+    94→// ─── Main Page ─────────────────────────────────────────────
+    95→export default function ListItemPage() {
+    96→  const navigate = useAppStore((s) => s.navigate);
+    97→  const viewData = useAppStore((s) => s.viewData);
+    98→  const queryClient = useQueryClient();
+    99→
+   100→  const editingProduct = viewData?.product as Product | undefined;
+   101→  const isEditing = !!editingProduct;
+   102→
+   103→  // ─── Image State ───────────────────────────────
+   104→  const [images, setImages] = useState<ImageItem[]>(() => {
+   105→    if (editingProduct?.images && editingProduct.images.length > 0) {
+   106→      return editingProduct.images.map((img: { url: string; id?: string }) => ({
+   107→        url: img.url,
+   108→        serverUrl: img.url,
+   109→      }));
+   110→    }
+   111→    return [];
+   112→  });
+   113→  const [isDragOver, setIsDragOver] = useState(false);
+   114→  const fileInputRef = useRef<HTMLInputElement>(null);
+   115→
+   116→  // Load existing images when editing
+   117→
+   118→  const MAX_IMAGES = 5;
+   119→  const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+   120→  const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/jpg'];
+   121→
+   122→  const processFiles = useCallback(async (files: FileList | File[]) => {
+   123→    const fileArray = Array.from(files);
+   124→    const remaining = MAX_IMAGES - images.length;
+   125→    if (remaining <= 0) {
+   126→      toast.error(`Maximum ${MAX_IMAGES} images allowed`);
+   127→      return;
+   128→    }
+   129→    const toProcess = fileArray.slice(0, remaining);
+   130→    const validFiles: File[] = [];
+   131→
+   132→    for (const f of toProcess) {
+   133→      if (!ALLOWED_TYPES.includes(f.type)) {
+   134→        toast.error(`"${f.name}" is not a supported format. Use PNG, JPG, or WEBP.`);
+   135→        continue;
+   136→      }
+   137→      if (f.size > MAX_SIZE) {
+   138→        toast.error(`"${f.name}" exceeds 5MB limit`);
+   139→        continue;
+   140→      }
+   141→      validFiles.push(f);
+   142→    }
+   143→
+   144→    if (validFiles.length === 0) return;
+   145→
+   146→    // Add items with uploading state
+   147→    const newItems: ImageItem[] = validFiles.map(f => ({
+   148→      file: f,
+   149→      url: URL.createObjectURL(f),
+   150→      uploading: true,
+   151→      progress: 0,
+   152→    }));
+   153→    setImages(prev => [...prev, ...newItems]);
+   154→
+   155→    // Upload each file
+   156→    for (let i = 0; i < validFiles.length; i++) {
+   157→      const itemIdx = images.length + i;
+   158→      try {
+   159→        // Simulate progress
+   160→        const progressInterval = setInterval(() => {
+   161→          setImages(prev => {
+   162→            const updated = [...prev];
+   163→            if (updated[itemIdx]) {
+   164→              updated[itemIdx] = {
+   165→                ...updated[itemIdx],
+   166→                progress: Math.min((updated[itemIdx].progress || 0) + Math.random() * 30, 90),
+   167→              };
+   168→            }
+   169→            return updated;
+   170→          });
+   171→        }, 200);
+   172→
+   173→        const result = await api.uploadImages([validFiles[i]]);
+   174→
+   175→        clearInterval(progressInterval);
+   176→
+   177→        setImages(prev => {
+   178→          const updated = [...prev];
+   179→          if (updated[itemIdx] && result.url) {
+   180→            updated[itemIdx] = {
+   181→              ...updated[itemIdx],
+   182→              serverUrl: result.url,
+   183→              uploading: false,
+   184→              progress: 100,
+   185→            };
+   186→          }
+   187→          return updated;
+   188→        });
+   189→      } catch {
+   190→        setImages(prev => prev.filter((_, idx) => idx !== itemIdx));
+   191→        toast.error(`Failed to upload "${validFiles[i].name}"`);
+   192→      }
+   193→    }
+   194→  }, [images.length]);
+   195→
+   196→  const handleDragOver = useCallback((e: React.DragEvent) => {
+   197→    e.preventDefault();
+   198→    e.stopPropagation();
+   199→    setIsDragOver(true);
+   200→  }, []);
+   201→
+   202→  const handleDragLeave = useCallback((e: React.DragEvent) => {
+   203→    e.preventDefault();
+   204→    e.stopPropagation();
+   205→    setIsDragOver(false);
+   206→  }, []);
+   207→
+   208→  const handleDrop = useCallback((e: React.DragEvent) => {
+   209→    e.preventDefault();
+   210→    e.stopPropagation();
+   211→    setIsDragOver(false);
+   212→    if (e.dataTransfer.files.length > 0) {
+   213→      processFiles(e.dataTransfer.files);
+   214→    }
+   215→  }, [processFiles]);
+   216→
+   217→  const removeImage = useCallback((index: number) => {
+   218→    setImages(prev => {
+   219→      const item = prev[index];
+   220→      // Revoke object URL if it's a local preview
+   221→      if (item && !item.serverUrl && item.url.startsWith('blob:')) {
+   222→        URL.revokeObjectURL(item.url);
+   223→      }
+   224→      return prev.filter((_, i) => i !== index);
+   225→    });
+   226→  }, []);
+   227→
+   228→  // Fetch categories & states
+   229→  const { data: categories = [], isLoading: loadingCategories } = useQuery({
+   230→    queryKey: ['categories'],
+   231→    queryFn: async () => { const d = await api.getCategories(); return d as unknown as Category[]; },
+   232→  });
+   233→
+   234→  const { data: states = [], isLoading: loadingStates } = useQuery({
+   235→    queryKey: ['states'],
+   236→    queryFn: async () => { const d = await api.getStates(); return d as unknown as State[]; },
+   237→  });
+   238→
+   239→  // Form
+   240→  const form = useForm<ProductFormData>({
+   241→    resolver: zodResolver(productSchema),
+   242→    defaultValues: {
+   243→      title: '',
+   244→      categoryId: '',
+   245→      description: '',
+   246→      condition: 'GOOD',
+   247→      brand: '',
+   248→      model: '',
+   249→      purchaseYear: '',
+   250→      dailyPrice: '',
+   251→      weeklyPrice: '',
+   252→      securityDeposit: '',
+   253→      minRentalDays: '1',
+   254→      maxRentalDays: '30',
+   255→      stateId: '',
+   256→      cityId: '',
+   257→      pickupAddress: '',
+   258→      deliveryAvailable: false,
+   259→      deliveryFee: '',
+   260→      rentalRules: '',
+   261→      cancellationPolicy: '',
+   262→      ownerNotes: '',
+   263→    },
+   264→  });
+   265→
+   266→  const { register, handleSubmit, control, setValue, formState: { errors } } = form;
+   267→  const selectedStateId = useWatch({ control: form.control, name: 'stateId' });
+   268→  const deliveryAvailable = useWatch({ control: form.control, name: 'deliveryAvailable' });
+   269→
+   270→  // Get cities for selected state
+   271→  const selectedState = states.find((s: State) => s.id === selectedStateId);
+   272→  const cities = (selectedState as any)?.cities ?? [];
+   273→
+   274→  // Populate form when editing
+   275→  useEffect(() => {
+   276→    if (editingProduct) {
+   277→      setValue('title', editingProduct.title);
+   278→      setValue('categoryId', editingProduct.categoryId);
+   279→      setValue('description', editingProduct.description || '');
+   280→      setValue('condition', editingProduct.condition);
+   281→      setValue('brand', editingProduct.brand || '');
+   282→      setValue('model', editingProduct.model || '');
+   283→      setValue('purchaseYear', editingProduct.purchaseYear ? String(editingProduct.purchaseYear) : '');
+   284→      setValue('dailyPrice', String(editingProduct.dailyPrice));
+   285→      setValue('weeklyPrice', editingProduct.weeklyPrice ? String(editingProduct.weeklyPrice) : '');
+   286→      setValue('securityDeposit', String(editingProduct.securityDeposit));
+   287→      setValue('minRentalDays', String(editingProduct.minRentalDays));
+   288→      setValue('maxRentalDays', String(editingProduct.maxRentalDays));
+   289→      setValue('stateId', editingProduct.stateId || '');
+   290→      setValue('cityId', editingProduct.cityId || '');
+   291→      setValue('pickupAddress', editingProduct.pickupAddress || '');
+   292→      setValue('deliveryAvailable', editingProduct.deliveryAvailable);
+   293→      setValue('deliveryFee', String(editingProduct.deliveryFee));
+   294→      setValue('rentalRules', editingProduct.rentalRules || '');
+   295→      setValue('cancellationPolicy', editingProduct.cancellationPolicy || '');
+   296→      setValue('ownerNotes', editingProduct.ownerNotes || '');
+   297→    }
+   298→  }, [editingProduct, setValue]);
+   299→
+   300→  // Reset city when state changes
+   301→  useEffect(() => {
+   302→    if (!isEditing || !editingProduct?.cityId) {
+   303→      setValue('cityId', '');
+   304→    }
+   305→  }, [selectedStateId]);
+   306→
+   307→  // Submit mutation
+   308→  const submitMutation = useMutation({
+   309→    mutationFn: async (data: ProductFormData) => {
+   310→      // Wait for any pending uploads
+   311→      const pendingUpload = images.some(img => img.uploading);
+   312→      if (pendingUpload) {
+   313→        throw new Error('Please wait for images to finish uploading');
+   314→      }
+   315→
+   316→      const payload: Record<string, unknown> = {
+   317→        title: data.title,
+   318→        categoryId: data.categoryId,
+   319→        description: data.description,
+   320→        condition: data.condition,
+   321→        brand: data.brand || undefined,
+   322→        model: data.model || undefined,
+   323→        purchaseYear: data.purchaseYear ? parseInt(data.purchaseYear) : undefined,
+   324→        dailyPrice: parseFloat(data.dailyPrice),
+   325→        weeklyPrice: data.weeklyPrice ? parseFloat(data.weeklyPrice) : undefined,
+   326→        securityDeposit: parseFloat(data.securityDeposit),
+   327→        minRentalDays: parseInt(data.minRentalDays),
+   328→        maxRentalDays: parseInt(data.maxRentalDays),
+   329→        stateId: data.stateId,
+   330→        cityId: data.cityId,
+   331→        pickupAddress: data.pickupAddress,
+   332→        deliveryAvailable: data.deliveryAvailable,
+   333→        deliveryFee: data.deliveryFee ? parseFloat(data.deliveryFee) : 0,
+   334→        rentalRules: data.rentalRules || undefined,
+   335→        cancellationPolicy: data.cancellationPolicy || undefined,
+   336→        ownerNotes: data.ownerNotes || undefined,
+   337→      };
+   338→
+   339→      // Attach uploaded image URLs
+   340→      const uploadedUrls = images
+   341→        .filter(img => img.serverUrl)
+   342→        .map(img => img.serverUrl);
+   343→      if (uploadedUrls.length > 0) {
+   344→        payload.imageUrls = uploadedUrls;
+   345→      }
+   346→
+   347→      if (isEditing) {
+   348→        return api.updateProduct(editingProduct.id, payload);
+   349→      }
+   350→      return api.createProduct(payload);
+   351→    },
+   352→    onSuccess: () => {
+   353→      toast.success(isEditing ? 'Listing updated successfully!' : 'Listing created successfully!');
+   354→      queryClient.invalidateQueries({ queryKey: ['my-products'] });
+   355→      queryClient.invalidateQueries({ queryKey: ['products'] });
+   356→      navigate('my-listings');
+   357→    },
+   358→    onError: (e: Error) => toast.error(e.message),
+   359→  });
+   360→
+   361→  const onSubmit = (data: ProductFormData) => {
+   362→    submitMutation.mutate(data);
+   363→  };
+   364→
+   365→  const isSubmitting = submitMutation.isPending;
+   366→  const isLoadingData = loadingCategories || loadingStates;
+   367→  const hasUploadingImages = images.some(img => img.uploading);
+   368→
+   369→  return (
+   370→    <div className="min-h-screen bg-slate-50">
+   371→      {/* Header */}
+   372→      <div className="bg-white border-b border-slate-200 sticky top-0 z-30">
+   373→        <div className="max-w-4xl mx-auto px-4 sm:px-6">
+   374→          <div className="flex items-center justify-between h-16">
+   375→            <div className="flex items-center gap-3">
+   376→              <Button variant="ghost" size="sm" className="text-slate-600 hover:text-slate-900" onClick={() => navigate('my-listings')}>
+   377→                <ArrowLeft className="h-4 w-4 mr-1" />Back
+   378→              </Button>
+   379→              <div className="h-6 w-px bg-slate-200" />
+   380→              <h1 className="text-lg font-bold text-slate-900">{isEditing ? 'Edit Listing' : 'List a New Item'}</h1>
+   381→            </div>
+   382→          </div>
+   383→        </div>
+   384→      </div>
+   385→
+   386→      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+   387→        {isLoadingData ? (
+   388→          <div className="space-y-6">
+   389→            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-48 w-full rounded-xl" />)}
+   390→          </div>
+   391→        ) : (
+   392→          <motion.form
+   393→            initial={{ opacity: 0, y: 16 }}
+   394→            animate={{ opacity: 1, y: 0 }}
+   395→            onSubmit={handleSubmit(onSubmit)}
+   396→            className="space-y-6"
+   397→          >
+   398→            {/* Basic Information */}
+   399→            <FormSection title="Basic Information">
+   400→              <div className="space-y-4">
+   401→                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   402→                  <div className="md:col-span-2">
+   403→                    <Label htmlFor="title" className="text-sm font-medium text-slate-700">
+   404→                      Product Title <span className="text-red-500">*</span>
+   405→                    </Label>
+   406→                    <Input id="title" placeholder="e.g., Canon EOS R5 Camera" className="mt-1.5" {...register('title')} />
+   407→                    {errors.title && <p className="text-xs text-red-500 mt-1">{errors.title.message}</p>}
+   408→                  </div>
+   409→
+   410→                  <div>
+   411→                    <Label className="text-sm font-medium text-slate-700">Category <span className="text-red-500">*</span></Label>
+   412→                    <Controller
+   413→                      name="categoryId"
+   414→                      control={control}
+   415→                      render={({ field }) => (
+   416→                        <Select value={field.value} onValueChange={field.onChange}>
+   417→                          <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select category" /></SelectTrigger>
+   418→                          <SelectContent>
+   419→                            {categories.map((cat) => (
+   420→                              <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+   421→                            ))}
+   422→                          </SelectContent>
+   423→                        </Select>
+   424→                      )}
+   425→                    />
+   426→                    {errors.categoryId && <p className="text-xs text-red-500 mt-1">{errors.categoryId.message}</p>}
+   427→                  </div>
+   428→
+   429→                  <div>
+   430→                    <Label className="text-sm font-medium text-slate-700">Condition <span className="text-red-500">*</span></Label>
+   431→                    <Controller
+   432→                      name="condition"
+   433→                      control={control}
+   434→                      render={({ field }) => (
+   435→                        <Select value={field.value} onValueChange={field.onChange}>
+   436→                          <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+   437→                          <SelectContent>
+   438→                            {conditionOptions.map((opt) => (
+   439→                              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+   440→                            ))}
+   441→                          </SelectContent>
+   442→                        </Select>
+   443→                      )}
+   444→                    />
+   445→                  </div>
+   446→                </div>
+   447→
+   448→                <div>
+   449→                  <Label htmlFor="description" className="text-sm font-medium text-slate-700">
+   450→                    Description <span className="text-red-500">*</span>
+   451→                  </Label>
+   452→                  <Textarea id="description" placeholder="Describe your item in detail..." rows={4} className="mt-1.5 resize-none" {...register('description')} />
+   453→                  {errors.description && <p className="text-xs text-red-500 mt-1">{errors.description.message}</p>}
+   454→                </div>
+   455→
+   456→                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   457→                  <div>
+   458→                    <Label htmlFor="brand" className="text-sm font-medium text-slate-700">Brand</Label>
+   459→                    <Input id="brand" placeholder="e.g., Canon" className="mt-1.5" {...register('brand')} />
+   460→                  </div>
+   461→                  <div>
+   462→                    <Label htmlFor="model" className="text-sm font-medium text-slate-700">Model</Label>
+   463→                    <Input id="model" placeholder="e.g., EOS R5" className="mt-1.5" {...register('model')} />
+   464→                  </div>
+   465→                  <div>
+   466→                    <Label htmlFor="purchaseYear" className="text-sm font-medium text-slate-700">Purchase Year</Label>
+   467→                    <Input id="purchaseYear" placeholder="e.g., 2023" className="mt-1.5" {...register('purchaseYear')} />
+   468→                  </div>
+   469→                </div>
+   470→              </div>
+   471→            </FormSection>
+   472→
+   473→            {/* Pricing */}
+   474→            <FormSection title="Pricing">
+   475→              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   476→                <div>
+   477→                  <Label htmlFor="dailyPrice" className="text-sm font-medium text-slate-700">Daily Price (₹) <span className="text-red-500">*</span></Label>
+   478→                  <div className="relative mt-1.5">
+   479→                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+   480→                    <Input id="dailyPrice" placeholder="0" className="pl-9" {...register('dailyPrice')} />
+   481→                  </div>
+   482→                  {errors.dailyPrice && <p className="text-xs text-red-500 mt-1">{errors.dailyPrice.message}</p>}
+   483→                </div>
+   484→                <div>
+   485→                  <Label htmlFor="weeklyPrice" className="text-sm font-medium text-slate-700">Weekly Price (₹)</Label>
+   486→                  <div className="relative mt-1.5">
+   487→                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+   488→                    <Input id="weeklyPrice" placeholder="Optional" className="pl-9" {...register('weeklyPrice')} />
+   489→                  </div>
+   490→                </div>
+   491→                <div>
+   492→                  <Label htmlFor="securityDeposit" className="text-sm font-medium text-slate-700">Security Deposit (₹) <span className="text-red-500">*</span></Label>
+   493→                  <div className="relative mt-1.5">
+   494→                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+   495→                    <Input id="securityDeposit" placeholder="0" className="pl-9" {...register('securityDeposit')} />
+   496→                  </div>
+   497→                  {errors.securityDeposit && <p className="text-xs text-red-500 mt-1">{errors.securityDeposit.message}</p>}
+   498→                </div>
+   499→                <div className="grid grid-cols-2 gap-4">
+   500→                  <div>
+   501→                    <Label htmlFor="minRentalDays" className="text-sm font-medium text-slate-700">Min Days <span className="text-red-500">*</span></Label>
+   502→                    <Input id="minRentalDays" type="number" min="1" className="mt-1.5" {...register('minRentalDays')} />
+   503→                    {errors.minRentalDays && <p className="text-xs text-red-500 mt-1">{errors.minRentalDays.message}</p>}
+   504→                  </div>
+   505→                  <div>
+   506→                    <Label htmlFor="maxRentalDays" className="text-sm font-medium text-slate-700">Max Days <span className="text-red-500">*</span></Label>
+   507→                    <Input id="maxRentalDays" type="number" min="1" className="mt-1.5" {...register('maxRentalDays')} />
+   508→                    {errors.maxRentalDays && <p className="text-xs text-red-500 mt-1">{errors.maxRentalDays.message}</p>}
+   509→                  </div>
+   510→                </div>
+   511→              </div>
+   512→            </FormSection>
+   513→
+   514→            {/* Location */}
+   515→            <FormSection title="Location">
+   516→              <div className="space-y-4">
+   517→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   518→                  <div>
+   519→                    <Label className="text-sm font-medium text-slate-700">State <span className="text-red-500">*</span></Label>
+   520→                    <Controller
+   521→                      name="stateId"
+   522→                      control={control}
+   523→                      render={({ field }) => (
+   524→                        <Select value={field.value} onValueChange={(v) => { field.onChange(v); setValue('cityId', ''); }}>
+   525→                          <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select state" /></SelectTrigger>
+   526→                          <SelectContent>
+   527→                            {states.map((s) => (
+   528→                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+   529→                            ))}
+   530→                          </SelectContent>
+   531→                        </Select>
+   532→                      )}
+   533→                    />
+   534→                    {errors.stateId && <p className="text-xs text-red-500 mt-1">{errors.stateId.message}</p>}
+   535→                  </div>
+   536→
+   537→                  <div>
+   538→                    <Label className="text-sm font-medium text-slate-700">City <span className="text-red-500">*</span></Label>
+   539→                    <Controller
+   540→                      name="cityId"
+   541→                      control={control}
+   542→                      render={({ field }) => (
+   543→                        <Select value={field.value} onValueChange={field.onChange} disabled={!selectedStateId}>
+   544→                          <SelectTrigger className="mt-1.5"><SelectValue placeholder={selectedStateId ? 'Select city' : 'Select state first'} /></SelectTrigger>
+   545→                          <SelectContent>
+   546→                            {cities.map((c: { id: string; name: string }) => (
+   547→                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+   548→                            ))}
+   549→                          </SelectContent>
+   550→                        </Select>
+   551→                      )}
+   552→                    />
+   553→                    {errors.cityId && <p className="text-xs text-red-500 mt-1">{errors.cityId.message}</p>}
+   554→                  </div>
+   555→                </div>
+   556→
+   557→                <div>
+   558→                  <Label htmlFor="pickupAddress" className="text-sm font-medium text-slate-700">Pickup Address <span className="text-red-500">*</span></Label>
+   559→                  <Textarea id="pickupAddress" placeholder="Full pickup address..." rows={2} className="mt-1.5 resize-none" {...register('pickupAddress')} />
+   560→                  {errors.pickupAddress && <p className="text-xs text-red-500 mt-1">{errors.pickupAddress.message}</p>}
+   561→                </div>
+   562→
+   563→                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+   564→                  <Controller
+   565→                    name="deliveryAvailable"
+   566→                    control={control}
+   567→                    render={({ field }) => (
+   568→                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+   569→                    )}
+   570→                  />
+   571→                  <Label className="text-sm font-medium text-slate-700 cursor-pointer" onClick={() => setValue('deliveryAvailable', !deliveryAvailable)}>
+   572→                    Delivery Available
+   573→                  </Label>
+   574→                  {deliveryAvailable && (
+   575→                    <div className="relative ml-auto">
+   576→                      <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+   577→                      <Input placeholder="Delivery fee" className="w-32 pl-9 h-9" {...register('deliveryFee')} />
+   578→                    </div>
+   579→                  )}
+   580→                </div>
+   581→              </div>
+   582→            </FormSection>
+   583→
+   584→            {/* Images */}
+   585→            <FormSection title="Images">
+   586→              <div className="space-y-4">
+   587→                {/* Image Previews */}
+   588→                <AnimatePresence mode="popLayout">
+   589→                  {images.length > 0 && (
+   590→                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+   591→                      {images.map((img, idx) => (
+   592→                        <motion.div
+   593→                          key={`${img.url}-${idx}`}
+   594→                          layout
+   595→                          initial={{ opacity: 0, scale: 0.8 }}
+   596→                          animate={{ opacity: 1, scale: 1 }}
+   597→                          exit={{ opacity: 0, scale: 0.8 }}
+   598→                          className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-100"
+   599→                        >
+   600→                          <img
+   601→                            src={img.url}
+   602→                            alt={`Product ${idx + 1}`}
+   603→                            className="w-full h-full object-cover"
+   604→                          />
+   605→                          {/* Upload overlay */}
+   606→                          {img.uploading && (
+   607→                            <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-2">
+   608→                              <Loader2 className="h-5 w-5 text-white animate-spin" />
+   609→                              <Progress value={img.progress || 0} className="w-16 h-1.5" />
+   610→                              <span className="text-[10px] text-white/80">{Math.round(img.progress || 0)}%</span>
+   611→                            </div>
+   612→                          )}
+   613→                          {/* First image badge */}
+   614→                          {idx === 0 && !img.uploading && (
+   615→                            <div className="absolute top-1 left-1 bg-emerald-600 text-white text-[10px] font-medium px-1.5 py-0.5 rounded">Cover</div>
+   616→                          )}
+   617→                          {/* Remove button */}
+   618→                          {!img.uploading && (
+   619→                            <button
+   620→                              type="button"
+   621→                              onClick={() => removeImage(idx)}
+   622→                              className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 hover:bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+   623→                            >
+   624→                              <X className="h-3.5 w-3.5" />
+   625→                            </button>
+   626→                          )}
+   627→                        </motion.div>
+   628→                      ))}
+   629→
+   630→                      {/* Add more button */}
+   631→                      {images.length < MAX_IMAGES && !hasUploadingImages && (
+   632→                        <motion.button
+   633→                          type="button"
+   634→                          initial={{ opacity: 0, scale: 0.8 }}
+   635→                          animate={{ opacity: 1, scale: 1 }}
+   636→                          onClick={() => fileInputRef.current?.click()}
+   637→                          className="aspect-square rounded-lg border-2 border-dashed border-slate-300 hover:border-emerald-400 hover:bg-emerald-50/30 flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer"
+   638→                        >
+   639→                          <ImagePlus className="h-5 w-5 text-slate-400" />
+   640→                          <span className="text-[10px] text-slate-400 font-medium">Add</span>
+   641→                        </motion.button>
+   642→                      )}
+   643→                    </div>
+   644→                  )}
+   645→                </AnimatePresence>
+   646→
+   647→                {/* Drop Zone (shown when no images) */}
+   648→                {images.length === 0 && (
+   649→                  <div
+   650→                    onDragOver={handleDragOver}
+   651→                    onDragLeave={handleDragLeave}
+   652→                    onDrop={handleDrop}
+   653→                    onClick={() => fileInputRef.current?.click()}
+   654→                    className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center text-center transition-colors cursor-pointer ${
+   655→                      isDragOver
+   656→                        ? 'border-emerald-500 bg-emerald-50/50'
+   657→                        : 'border-slate-300 hover:border-emerald-400 hover:bg-emerald-50/30'
+   658→                    }`}
+   659→                  >
+   660→                    <div className="h-12 w-12 rounded-full bg-emerald-50 flex items-center justify-center mb-3">
+   661→                      <Upload className="h-6 w-6 text-emerald-600" />
+   662→                    </div>
+   663→                    <p className="text-sm font-medium text-slate-700">Drag & drop images here, or click to browse</p>
+   664→                    <p className="text-xs text-slate-400 mt-1">PNG, JPG, WEBP up to 5MB each (max {MAX_IMAGES} images)</p>
+   665→                    <Button type="button" variant="outline" size="sm" className="mt-3 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+   666→                      <ImageIcon className="h-4 w-4 mr-1.5" />
+   667→                      Choose Files
+   668→                    </Button>
+   669→                  </div>
+   670→                )}
+   671→
+   672→                {/* Hidden file input */}
+   673→                <input
+   674→                  ref={fileInputRef}
+   675→                  type="file"
+   676→                  accept="image/png,image/jpeg,image/webp"
+   677→                  multiple
+   678→                  className="hidden"
+   679→                  onChange={(e) => {
+   680→                    if (e.target.files) processFiles(e.target.files);
+   681→                    e.target.value = '';
+   682→                  }}
+   683→                />
+   684→
+   685→                <p className="text-xs text-slate-400">{images.length}/{MAX_IMAGES} images uploaded. First image will be the cover photo.</p>
+   686→              </div>
+   687→            </FormSection>
+   688→
+   689→            {/* Policies */}
+   690→            <FormSection title="Policies & Rules">
+   691→              <div className="space-y-4">
+   692→                <div>
+   693→                  <Label htmlFor="rentalRules" className="text-sm font-medium text-slate-700">Rental Rules</Label>
+   694→                  <Textarea id="rentalRules" placeholder="e.g., No smoking near the item, handle with care..." rows={3} className="mt-1.5 resize-none" {...register('rentalRules')} />
+   695→                </div>
+   696→                <div>
+   697→                  <Label htmlFor="cancellationPolicy" className="text-sm font-medium text-slate-700">Cancellation Policy</Label>
+   698→                  <Textarea id="cancellationPolicy" placeholder="e.g., Free cancellation 24 hours before start date..." rows={3} className="mt-1.5 resize-none" {...register('cancellationPolicy')} />
+   699→                </div>
+   700→                <div>
+   701→                  <Label htmlFor="ownerNotes" className="text-sm font-medium text-slate-700">Owner Notes</Label>
+   702→                  <Textarea id="ownerNotes" placeholder="Any additional notes for renters..." rows={3} className="mt-1.5 resize-none" {...register('ownerNotes')} />
+   703→                </div>
+   704→              </div>
+   705→            </FormSection>
+   706→
+   707→            {/* Submit */}
+   708→            <div className="flex items-center justify-between pb-8">
+   709→              <Button type="button" variant="outline" className="text-slate-600" onClick={() => navigate('my-listings')}>
+   710→                Cancel
+   711→              </Button>
+   712→              <Button
+   713→                type="submit"
+   714→                className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[160px]"
+   715→                disabled={isSubmitting || hasUploadingImages}
+   716→              >
+   717→                {isSubmitting ? (
+   718→                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />{isEditing ? 'Updating...' : 'Creating...'}</>
+   719→                ) : hasUploadingImages ? (
+   720→                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />Uploading images...</>
+   721→                ) : (
+   722→                  <>{isEditing ? 'Update Listing' : 'Create Listing'}</>
+   723→                )}
+   724→              </Button>
+   725→            </div>
+   726→          </motion.form>
+   727→        )}
+   728→      </div>
+   729→    </div>
+   730→  );
+   731→}
+   732→

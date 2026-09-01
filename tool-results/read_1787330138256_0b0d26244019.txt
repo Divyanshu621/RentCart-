@@ -1,0 +1,963 @@
+     1→'use client';
+     2→
+     3→import { useState, useMemo } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  X, CreditCard, Smartphone, Building2, Wallet, Truck,
+     7→  ShieldCheck, ChevronRight, Loader2, CheckCircle2, Lock, IndianRupee, Landmark, QrCode, ChevronDown,
+     8→} from 'lucide-react';
+     9→import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+    10→import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from '@/components/ui/drawer';
+    11→import { Button } from '@/components/ui/button';
+    12→import { Input } from '@/components/ui/input';
+    13→import { Label } from '@/components/ui/label';
+    14→import { Separator } from '@/components/ui/separator';
+    15→import { Badge } from '@/components/ui/badge';
+    16→import { api } from '@/lib/api';
+    17→import { toast } from 'sonner';
+    18→import { useQueryClient } from '@tanstack/react-query';
+    19→import { useIsMobile } from '@/hooks/use-mobile';
+    20→
+    21→declare global {
+    22→  interface Window {
+    23→    Razorpay: new (options: Record<string, unknown>) => {
+    24→      open: () => void;
+    25→      on: (event: string, handler: () => void) => void;
+    26→      close: () => void;
+    27→    };
+    28→  }
+    29→}
+    30→
+    31→interface PaymentCheckoutModalProps {
+    32→  open: boolean;
+    33→  onClose: () => void;
+    34→  rentalId: string;
+    35→  rentalData: {
+    36→    totalAmount: number;
+    37→    rentalAmount: number;
+    38→    platformFee: number;
+    39→    tax: number;
+    40→    deliveryFee: number;
+    41→    discount: number;
+    42→    securityDeposit: number;
+    43→    rentalDays: number;
+    44→    dailyRate: number;
+    45→    startDate: string;
+    46→    endDate: string;
+    47→    productTitle?: string;
+    48→    productImage?: string;
+    49→  } | null;
+    50→  onSuccess?: () => void;
+    51→}
+    52→
+    53→interface PaymentMethodDef {
+    54→  id: string;
+    55→  icon: React.ReactNode;
+    56→  label: string;
+    57→  desc: string;
+    58→  tag?: string;
+    59→  tagColor?: string;
+    60→}
+    61→
+    62→const banks = [
+    63→  { name: 'State Bank of India', code: 'SBI' },
+    64→  { name: 'HDFC Bank', code: 'HDFC' },
+    65→  { name: 'ICICI Bank', code: 'ICICI' },
+    66→  { name: 'Axis Bank', code: 'AXIS' },
+    67→  { name: 'Kotak Mahindra', code: 'KOTAK' },
+    68→  { name: 'Punjab National Bank', code: 'PNB' },
+    69→  { name: 'Bank of Baroda', code: 'BOB' },
+    70→  { name: 'Canara Bank', code: 'CANARA' },
+    71→];
+    72→
+    73→const upiApps = [
+    74→  { name: 'Google Pay', color: 'bg-white border border-gray-200 text-gray-800' },
+    75→  { name: 'PhonePe', color: 'bg-purple-600 text-white' },
+    76→  { name: 'Paytm', color: 'bg-blue-600 text-white' },
+    77→  { name: 'BHIM', color: 'bg-green-600 text-white' },
+    78→];
+    79→
+    80→const wallets = [
+    81→  { name: 'Paytm', color: 'bg-blue-600 text-white' },
+    82→  { name: 'Amazon Pay', color: 'bg-amber-500 text-white' },
+    83→  { name: 'Freecharge', color: 'bg-red-500 text-white' },
+    84→  { name: 'MobiKwik', color: 'bg-red-600 text-white' },
+    85→  { name: 'Jio Money', color: 'bg-blue-500 text-white' },
+    86→  { name: 'Ola Money', color: 'bg-green-700 text-white' },
+    87→];
+    88→
+    89→const paymentMethods: PaymentMethodDef[] = [
+    90→  {
+    91→    id: 'razorpay',
+    92→    icon: <CreditCard className="size-5" />,
+    93→    label: 'Razorpay',
+    94→    desc: 'UPI, Cards, Net Banking & Wallets',
+    95→    tag: 'Popular',
+    96→    tagColor: 'bg-emerald-100 text-emerald-700',
+    97→  },
+    98→  {
+    99→    id: 'upi',
+   100→    icon: <Smartphone className="size-5" />,
+   101→    label: 'UPI',
+   102→    desc: 'Google Pay, PhonePe, Paytm',
+   103→    tag: 'Instant',
+   104→    tagColor: 'bg-blue-100 text-blue-700',
+   105→  },
+   106→  {
+   107→    id: 'card',
+   108→    icon: <CreditCard className="size-5" />,
+   109→    label: 'Card',
+   110→    desc: 'Visa, Mastercard, Rupay',
+   111→  },
+   112→  {
+   113→    id: 'netbanking',
+   114→    icon: <Building2 className="size-5" />,
+   115→    label: 'Net Banking',
+   116→    desc: 'All major banks',
+   117→  },
+   118→  {
+   119→    id: 'wallet',
+   120→    icon: <Wallet className="size-5" />,
+   121→    label: 'Wallet',
+   122→    desc: 'Paytm, Amazon Pay, Mobikwik',
+   123→  },
+   124→  {
+   125→    id: 'cash',
+   126→    icon: <Truck className="size-5" />,
+   127→    label: 'Cash on Pickup',
+   128→    desc: 'Pay when you receive the item',
+   129→    tag: 'No Online Fee',
+   130→    tagColor: 'bg-amber-100 text-amber-700',
+   131→  },
+   132→];
+   133→
+   134→function formatDate(dateStr: string) {
+   135→  const d = new Date(dateStr);
+   136→  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+   137→}
+   138→
+   139→function formatCurrency(amount: number) {
+   140→  return amount.toLocaleString('en-IN');
+   141→}
+   142→
+   143→export default function PaymentCheckoutModal({
+   144→  open,
+   145→  onClose,
+   146→  rentalId,
+   147→  rentalData,
+   148→  onSuccess,
+   149→}: PaymentCheckoutModalProps) {
+   150→  const queryClient = useQueryClient();
+   151→  const isMobile = useIsMobile();
+   152→  const [selectedMethod, setSelectedMethod] = useState('razorpay');
+   153→  const [upiId, setUpiId] = useState('');
+   154→  const [cardNumber, setCardNumber] = useState('');
+   155→  const [cardExpiry, setCardExpiry] = useState('');
+   156→  const [cardCvv, setCardCvv] = useState('');
+   157→  const [cardName, setCardName] = useState('');
+   158→  const [selectedBank, setSelectedBank] = useState('');
+   159→  const [selectedWallet, setSelectedWallet] = useState('');
+   160→  const [processing, setProcessing] = useState(false);
+   161→  const [step, setStep] = useState<'checkout' | 'processing' | 'success'>('checkout');
+   162→  const [txnId, setTxnId] = useState('');
+   163→  const [orderSummaryExpanded, setOrderSummaryExpanded] = useState(false);
+   164→
+   165→  const dateRange = useMemo(() => {
+   166→    if (!rentalData) return '';
+   167→    return `${formatDate(rentalData.startDate)} - ${formatDate(rentalData.endDate)}, ${new Date(rentalData.endDate).getFullYear()} (${rentalData.rentalDays} days)`;
+   168→  }, [rentalData]);
+   169→
+   170→  const formatCardNumber = (value: string) => {
+   171→    const v = value.replace(/\D/g, '').slice(0, 16);
+   172→    return v.replace(/(.{4})/g, '$1 ').trim();
+   173→  };
+   174→
+   175→  const formatExpiry = (value: string) => {
+   176→    const v = value.replace(/\D/g, '').slice(0, 4);
+   177→    if (v.length >= 3) return v.slice(0, 2) + '/' + v.slice(2);
+   178→    return v;
+   179→  };
+   180→
+   181→  const validateUPI = (id: string) => {
+   182→    return id.includes('@') && id.length >= 3;
+   183→  };
+   184→
+   185→  const validateCard = () => {
+   186→    const num = cardNumber.replace(/\s/g, '');
+   187→    return num.length === 16 && cardExpiry.length === 5 && cardCvv.length === 3 && cardName.trim().length > 0;
+   188→  };
+   189→
+   190→  const getPaymentButtonLabel = () => {
+   191→    const amount = `₹${rentalData ? formatCurrency(rentalData.totalAmount) : '0'}`;
+   192→    switch (selectedMethod) {
+   193→      case 'razorpay': return `Pay ${amount} with Razorpay`;
+   194→      case 'upi': return `Pay ${amount} via UPI`;
+   195→      case 'card': return `Pay ${amount} via Card`;
+   196→      case 'netbanking': return `Pay ${amount} via Net Banking`;
+   197→      case 'wallet': return `Pay ${amount} via Wallet`;
+   198→      case 'cash': return 'Confirm Cash on Pickup';
+   199→      default: return `Pay ${amount}`;
+   200→    }
+   201→  };
+   202→
+   203→  const isPayDisabled = () => {
+   204→    if (processing) return true;
+   205→    switch (selectedMethod) {
+   206→      case 'upi': return !validateUPI(upiId);
+   207→      case 'card': return !validateCard();
+   208→      case 'netbanking': return !selectedBank;
+   209→      case 'wallet': return !selectedWallet;
+   210→      default: return false;
+   211→    }
+   212→  };
+   213→
+   214→  const generateTxnId = () => {
+   215→    const prefix = 'TXN';
+   216→    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+   217→    let result = prefix;
+   218→    for (let i = 0; i < 12; i++) {
+   219→      result += chars.charAt(Math.floor(Math.random() * chars.length));
+   220→    }
+   221→    return result;
+   222→  };
+   223→
+   224→  const handlePayment = async () => {
+   225→    if (!rentalData) return;
+   226→
+   227→    if (selectedMethod === 'cash') {
+   228→      setProcessing(true);
+   229→      setStep('processing');
+   230→      try {
+   231→        await api.verifyPayment({
+   232→          rentalId,
+   233→          paymentMethod: 'CASH_ON_PICKUP',
+   234→        });
+   235→        setTxnId(generateTxnId());
+   236→        setStep('success');
+   237→        queryClient.invalidateQueries({ queryKey: ['rentals'] });
+   238→        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+   239→      } catch {
+   240→        toast.error('Payment failed. Please try again.');
+   241→        setProcessing(false);
+   242→        setStep('checkout');
+   243→      }
+   244→      return;
+   245→    }
+   246→
+   247→    setProcessing(true);
+   248→    setStep('processing');
+   249→
+   250→    try {
+   251→      const orderData = await api.createPaymentOrder(rentalId, selectedMethod.toUpperCase()) as Record<string, unknown>;
+   252→
+   253→      if ((orderData as { method?: string }).method === 'razorpay') {
+   254→        // Real Razorpay integration
+   255→        const od = orderData as { key: string; amount: number; currency: string; orderId: string; customer?: { name?: string; email?: string; contact?: string } };
+   256→        const options: Record<string, unknown> = {
+   257→          key: od.key,
+   258→          amount: od.amount * 100, // convert to paise
+   259→          currency: od.currency,
+   260→          name: 'RentCart',
+   261→          description: od.customer?.name || 'Rental Payment',
+   262→          order_id: od.orderId,
+   263→          prefill: {
+   264→            name: od.customer?.name || '',
+   265→            email: od.customer?.email || '',
+   266→            contact: od.customer?.contact || '',
+   267→          },
+   268→          handler: function (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) {
+   269→            api.verifyPayment({
+   270→              rentalId,
+   271→              razorpayOrderId: response.razorpay_order_id,
+   272→              razorpayPaymentId: response.razorpay_payment_id,
+   273→              razorpaySignature: response.razorpay_signature,
+   274→              paymentMethod: selectedMethod.toUpperCase(),
+   275→            }).then(() => {
+   276→              setTxnId(response.razorpay_payment_id);
+   277→              setStep('success');
+   278→              queryClient.invalidateQueries({ queryKey: ['rentals'] });
+   279→              queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+   280→            }).catch(() => {
+   281→              toast.error('Payment verification failed');
+   282→              setProcessing(false);
+   283→              setStep('checkout');
+   284→            });
+   285→          },
+   286→          modal: !isMobile, // Don't open Razorpay modal on mobile (we're in drawer)
+   287→          theme: { color: '#059669' },
+   288→        };
+   289→
+   290→        const rzp = new window.Razorpay(options);
+   291→        rzp.on('payment.failed', () => {
+   292→          toast.error('Payment failed. Please try again.');
+   293→          setProcessing(false);
+   294→          setStep('checkout');
+   295→        });
+   296→        rzp.open();
+   297→        // Don't reset processing - the handler will do it
+   298→      } else {
+   299→        // Simulated mode
+   300→        await new Promise((resolve) => setTimeout(resolve, 2000));
+   301→        await api.verifyPayment({
+   302→          rentalId,
+   303→          paymentMethod: selectedMethod.toUpperCase(),
+   304→        });
+   305→        setTxnId(generateTxnId());
+   306→        setStep('success');
+   307→        queryClient.invalidateQueries({ queryKey: ['rentals'] });
+   308→        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+   309→      }
+   310→    } catch (error) {
+   311→      toast.error('Payment failed. Please try again.');
+   312→      setProcessing(false);
+   313→      setStep('checkout');
+   314→    }
+   315→  };
+   316→
+   317→  const handleClose = () => {
+   318→    if (processing) return;
+   319→    if (step === 'success') {
+   320→      onSuccess?.();
+   321→    }
+   322→    setSelectedMethod('razorpay');
+   323→    setUpiId('');
+   324→    setCardNumber('');
+   325→    setCardExpiry('');
+   326→    setCardCvv('');
+   327→    setCardName('');
+   328→    setSelectedBank('');
+   329→    setSelectedWallet('');
+   330→    setProcessing(false);
+   331→    setStep('checkout');
+   332→    setTxnId('');
+   333→    setOrderSummaryExpanded(false);
+   334→    onClose();
+   335→  };
+   336→
+   337→  const handleSuccess = () => {
+   338→    onSuccess?.();
+   339→    onClose();
+   340→  };
+   341→
+   342→  const renderOrderSummary = () => (
+   343→    <div className="rounded-xl border border-[#e2e8f0] bg-gray-50/50">
+   344→      {/* Mobile: compact toggle header */}
+   345→      <button
+   346→        type="button"
+   347→        onClick={() => setOrderSummaryExpanded(!orderSummaryExpanded)}
+   348→        className="w-full flex items-center justify-between p-4 sm:hidden"
+   349→      >
+   350→        <div className="flex items-center gap-2">
+   351→          <h3 className="text-sm font-semibold text-gray-900">Order Summary</h3>
+   352→          <Badge variant="secondary" className="text-xs font-medium bg-emerald-100 text-emerald-700">
+   353→            {rentalData?.rentalDays} days
+   354→          </Badge>
+   355→        </div>
+   356→        <div className="flex items-center gap-2">
+   357→          <span className="text-base font-bold text-gray-900">₹{formatCurrency(rentalData?.totalAmount ?? 0)}</span>
+   358→          <ChevronDown className={`size-4 text-gray-400 transition-transform ${orderSummaryExpanded ? 'rotate-180' : ''}`} />
+   359→        </div>
+   360→      </button>
+   361→
+   362→      {/* Desktop: always expanded header */
+   363→      <div className="hidden sm:flex items-center justify-between p-4 pb-0">
+   364→        <h3 className="text-sm font-semibold text-gray-900">Order Summary</h3>
+   365→        <Badge variant="secondary" className="text-xs font-medium bg-emerald-100 text-emerald-700">
+   366→          {rentalData?.rentalDays} days
+   367→        </Badge>
+   368→      </div>
+   369→
+   370→      <div className={`${orderSummaryExpanded ? '' : 'hidden sm:block'} p-4 pt-2 sm:pt-4`}>
+   371→        <p className="text-sm font-medium text-gray-800">
+   372→          {rentalData?.productTitle || 'Rental Item'}
+   373→        </p>
+   374→        <p className="mt-0.5 text-xs text-gray-500">{dateRange}</p>
+   375→
+   376→        <Separator className="my-3 bg-gray-200" />
+   377→
+   378→        <div className="space-y-1.5 text-xs">
+   379→          <div className="flex items-center justify-between">
+   380→            <span className="text-gray-500">Rental Amount</span>
+   381→            <span className="font-medium text-gray-700">
+   382→              ₹{rentalData?.dailyRate.toLocaleString('en-IN')} × {rentalData?.rentalDays} days
+   383→            </span>
+   384→          </div>
+   385→          <div className="flex items-center justify-between">
+   386→            <span className="text-gray-500">Platform Fee (10%)</span>
+   387→            <span className="font-medium text-gray-700">₹{formatCurrency(rentalData?.platformFee ?? 0)}</span>
+   388→          </div>
+   389→          <div className="flex items-center justify-between">
+   390→            <span className="text-gray-500">GST (18%)</span>
+   391→            <span className="font-medium text-gray-700">₹{formatCurrency(rentalData?.tax ?? 0)}</span>
+   392→          </div>
+   393→          <div className="flex items-center justify-between">
+   394→            <span className="text-gray-500">Delivery Fee</span>
+   395→            <span className="font-medium text-gray-700">₹{formatCurrency(rentalData?.deliveryFee ?? 0)}</span>
+   396→          </div>
+   397→          <div className="flex items-center justify-between">
+   398→            <span className="text-gray-500">Security Deposit</span>
+   399→            <div className="flex items-center gap-1.5">
+   400→              <span className="font-medium text-gray-700">₹{formatCurrency(rentalData?.securityDeposit ?? 0)}</span>
+   401→              <span className="text-[10px] text-emerald-600 font-medium">Refundable</span>
+   402→            </div>
+   403→          </div>
+   404→          {(rentalData?.discount ?? 0) > 0 && (
+   405→            <div className="flex items-center justify-between">
+   406→              <span className="text-gray-500">Discount</span>
+   407→              <span className="font-medium text-emerald-600">-₹{formatCurrency(rentalData?.discount ?? 0)}</span>
+   408→            </div>
+   409→          )}
+   410→        </div>
+   411→
+   412→        <Separator className="my-3 bg-gray-200" />
+   413→
+   414→        <div className="flex items-center justify-between">
+   415→          <span className="text-sm font-bold text-gray-900">Total Payable</span>
+   416→          <span className="text-lg font-bold text-gray-900">₹{formatCurrency(rentalData?.totalAmount ?? 0)}</span>
+   417→        </div>
+   418→      </div>
+   419→    </div>
+   420→  );
+   421→
+   422→  const renderMethodCards = () => (
+   423→    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+   424→      {paymentMethods.map((method) => {
+   425→        const isSelected = selectedMethod === method.id;
+   426→        return (
+   427→          <motion.button
+   428→            key={method.id}
+   429→            type="button"
+   430→            whileTap={{ scale: 0.97 }}
+   431→            onClick={() => {
+   432→              setSelectedMethod(method.id);
+   433→              setSelectedBank('');
+   434→              setSelectedWallet('');
+   435→            }}
+   436→            className={`
+   437→              relative flex items-center gap-3 rounded-xl border-2 p-3 sm:p-3.5 cursor-pointer transition-all text-left w-full min-h-[44px]
+   438→              ${isSelected
+   439→                ? 'border-emerald-500 bg-emerald-50 shadow-sm'
+   440→                : 'border-[#e2e8f0] hover:border-[#cbd5e1] bg-white'
+   441→              }
+   442→            `}
+   443→          >
+   444→            <div
+   445→              className={`
+   446→                flex items-center justify-center size-9 rounded-lg shrink-0
+   447→                ${isSelected ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}
+   448→              `}
+   449→            >
+   450→              {method.icon}
+   451→            </div>
+   452→            <div className="min-w-0 flex-1">
+   453→              <div className="flex items-center gap-2">
+   454→                <span className={`text-sm font-semibold truncate ${isSelected ? 'text-emerald-800' : 'text-gray-800'}`}>
+   455→                  {method.label}
+   456→                </span>
+   457→                {method.tag && method.tagColor && (
+   458→                  <Badge
+   459→                    className={`text-[10px] px-1.5 py-0 font-semibold leading-tight border-0 ${method.tagColor}`}
+   460→                  >
+   461→                    {method.tag}
+   462→                  </Badge>
+   463→                )}
+   464→              </div>
+   465→              <p className="text-[11px] text-gray-500 mt-0.5 truncate">{method.desc}</p>
+   466→            </div>
+   467→            {isSelected && (
+   468→              <div className="flex items-center justify-center size-5 rounded-full bg-emerald-500 text-white shrink-0">
+   469→                <CheckCircle2 className="size-3.5" />
+   470→              </div>
+   471→            )}
+   472→          </motion.button>
+   473→        );
+   474→      })}
+   475→    </div>
+   476→  );
+   477→
+   478→  const renderUPIForm = () => (
+   479→    <motion.div
+   480→      key="upi-form"
+   481→      initial={{ opacity: 0, height: 0 }}
+   482→      animate={{ opacity: 1, height: 'auto' }}
+   483→      exit={{ opacity: 0, height: 0 }}
+   484→      transition={{ duration: 0.2 }}
+   485→      className="overflow-hidden"
+   486→    >
+   487→      <div className="rounded-xl border border-[#e2e8f0] bg-white p-4 space-y-4">
+   488→        <div>
+   489→          <Label className="text-xs font-semibold text-gray-700 mb-2 block">
+   490→            Quick Pay with UPI App
+   491→          </Label>
+   492→          <div className="grid grid-cols-4 gap-2">
+   493→            {upiApps.map((app) => (
+   494→              <motion.button
+   495→                key={app.name}
+   496→                type="button"
+   497→                whileTap={{ scale: 0.95 }}
+   498→                onClick={() => {
+   499→                  toast.info(`Opening ${app.name}...`, { description: 'Complete the payment in the UPI app' });
+   500→                }}
+   501→                className={`flex flex-col items-center gap-1.5 rounded-lg p-2.5 min-h-[44px] transition-all hover:shadow-sm ${app.color}`}
+   502→              >
+   503→                <Smartphone className="size-4" />
+   504→                <span className="text-[10px] font-semibold leading-tight text-center">{app.name}</span>
+   505→              </motion.button>
+   506→            ))}
+   507→          </div>
+   508→        </div>
+   509→
+   510→        <div className="flex items-center gap-3">
+   511→          <Separator className="flex-1 bg-gray-200" />
+   512→          <span className="text-[11px] text-gray-400 font-medium uppercase tracking-wider">or enter UPI ID</span>
+   513→          <Separator className="flex-1 bg-gray-200" />
+   514→        </div>
+   515→
+   516→        <div>
+   517→          <Label htmlFor="upi-id" className="text-xs font-semibold text-gray-700">
+   518→            UPI ID
+   519→          </Label>
+   520→          <div className="relative mt-1.5">
+   521→            <QrCode className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+   522→            <Input
+   523→              id="upi-id"
+   524→              type="text"
+   525→              placeholder="yourname@upi"
+   526→              value={upiId}
+   527→              onChange={(e) => setUpiId(e.target.value.toLowerCase())}
+   528→              className={`pl-10 h-11 text-sm ${
+   529→                upiId.length > 0 && !validateUPI(upiId)
+   530→                  ? 'border-red-300 focus-visible:ring-red-200'
+   531→                  : 'focus-visible:ring-emerald-200 focus-visible:border-emerald-400'
+   532→              }`}
+   533→            />
+   534→          </div>
+   535→          {upiId.length > 0 && !validateUPI(upiId) && (
+   536→            <p className="text-[11px] text-red-500 mt-1.5 flex items-center gap-1">
+   537→              <X className="size-3" /> Enter a valid UPI ID (e.g. name@upi)
+   538→            </p>
+   539→          )}
+   540→        </div>
+   541→      </div>
+   542→    </motion.div>
+   543→  );
+   544→
+   545→  const renderCardForm = () => (
+   546→    <motion.div
+   547→      key="card-form"
+   548→      initial={{ opacity: 0, height: 0 }}
+   549→      animate={{ opacity: 1, height: 'auto' }}
+   550→      exit={{ opacity: 0, height: 0 }}
+   551→      transition={{ duration: 0.2 }}
+   552→      className="overflow-hidden"
+   553→    >
+   554→      <div className="rounded-xl border border-[#e2e8f0] bg-white p-4 space-y-4">
+   555→        <div>
+   556→          <Label htmlFor="card-number" className="text-xs font-semibold text-gray-700">
+   557→            Card Number
+   558→          </Label>
+   559→          <div className="relative mt-1.5">
+   560→            <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+   561→            <Input
+   562→              id="card-number"
+   563→              type="text"
+   564→              placeholder="1234 5678 9012 3456"
+   565→              value={cardNumber}
+   566→              onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
+   567→              className="pl-10 h-11 text-sm font-mono tracking-wider"
+   568→              maxLength={19}
+   569→            />
+   570→          </div>
+   571→        </div>
+   572→
+   573→        <div className="grid grid-cols-2 gap-3">
+   574→          <div>
+   575→            <Label htmlFor="card-expiry" className="text-xs font-semibold text-gray-700">
+   576→              Expiry Date
+   577→            </Label>
+   578→            <Input
+   579→              id="card-expiry"
+   580→              type="text"
+   581→              placeholder="MM/YY"
+   582→              value={cardExpiry}
+   583→              onChange={(e) => setCardExpiry(formatExpiry(e.target.value))}
+   584→              className="mt-1.5 h-11 text-sm font-mono"
+   585→              maxLength={5}
+   586→            />
+   587→          </div>
+   588→          <div>
+   589→            <Label htmlFor="card-cvv" className="text-xs font-semibold text-gray-700">
+   590→              CVV
+   591→            </Label>
+   592→            <Input
+   593→              id="card-cvv"
+   594→              type="password"
+   595→              placeholder="•••"
+   596→              value={cardCvv}
+   597→              onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, '').slice(0, 3))}
+   598→              className="mt-1.5 h-11 text-sm font-mono"
+   599→              maxLength={3}
+   600→            />
+   601→          </div>
+   602→        </div>
+   603→
+   604→        <div>
+   605→          <Label htmlFor="card-name" className="text-xs font-semibold text-gray-700">
+   606→            Cardholder Name
+   607→          </Label>
+   608→          <Input
+   609→            id="card-name"
+   610→            type="text"
+   611→            placeholder="Name on card"
+   612→            value={cardName}
+   613→            onChange={(e) => setCardName(e.target.value)}
+   614→            className="mt-1.5 h-11 text-sm"
+   615→          />
+   616→        </div>
+   617→      </div>
+   618→    </motion.div>
+   619→  );
+   620→
+   621→  const renderNetBankingForm = () => (
+   622→    <motion.div
+   623→      key="netbanking-form"
+   624→      initial={{ opacity: 0, height: 0 }}
+   625→      animate={{ opacity: 1, height: 'auto' }}
+   626→      exit={{ opacity: 0, height: 0 }}
+   627→      transition={{ duration: 0.2 }}
+   628→      className="overflow-hidden"
+   629→    >
+   630→      <div className="rounded-xl border border-[#e2e8f0] bg-white p-4 space-y-3">
+   631→        <Label className="text-xs font-semibold text-gray-700">
+   632→          Popular Banks
+   633→        </Label>
+   634→        <div className="grid grid-cols-2 gap-2">
+   635→          {banks.map((bank) => {
+   636→            const isSelected = selectedBank === bank.code;
+   637→            return (
+   638→              <motion.button
+   639→                key={bank.code}
+   640→                type="button"
+   641→                whileTap={{ scale: 0.97 }}
+   642→                onClick={() => setSelectedBank(bank.code)}
+   643→                className={`
+   644→                  flex items-center gap-2.5 rounded-lg border-2 px-3 py-2.5 min-h-[44px] transition-all text-left
+   645→                  ${isSelected
+   646→                    ? 'border-emerald-500 bg-emerald-50'
+   647→                    : 'border-[#e2e8f0] hover:border-[#cbd5e1] bg-white'
+   648→                  }
+   649→                `}
+   650→              >
+   651→                <Landmark
+   652→                  className={`size-4 shrink-0 ${isSelected ? 'text-emerald-600' : 'text-gray-400'}`}
+   653→                />
+   654→                <span className={`text-xs font-medium truncate ${isSelected ? 'text-emerald-800' : 'text-gray-700'}`}>
+   655→                  {bank.name}
+   656→                </span>
+   657→              </motion.button>
+   658→            );
+   659→          })}
+   660→        </div>
+   661→      </div>
+   662→    </motion.div>
+   663→  );
+   664→
+   665→  const renderWalletForm = () => (
+   666→    <motion.div
+   667→      key="wallet-form"
+   668→      initial={{ opacity: 0, height: 0 }}
+   669→      animate={{ opacity: 1, height: 'auto' }}
+   670→      exit={{ opacity: 0, height: 0 }}
+   671→      transition={{ duration: 0.2 }}
+   672→      className="overflow-hidden"
+   673→    >
+   674→      <div className="rounded-xl border border-[#e2e8f0] bg-white p-4 space-y-3">
+   675→        <Label className="text-xs font-semibold text-gray-700">
+   676→          Select Wallet
+   677→        </Label>
+   678→        <div className="grid grid-cols-2 gap-2">
+   679→          {wallets.map((wallet) => {
+   680→            const isSelected = selectedWallet === wallet.name;
+   681→            return (
+   682→              <motion.button
+   683→                key={wallet.name}
+   684→                type="button"
+   685→                whileTap={{ scale: 0.97 }}
+   686→                onClick={() => setSelectedWallet(wallet.name)}
+   687→                className={`
+   688→                  flex items-center gap-2.5 rounded-lg border-2 px-3 py-2.5 min-h-[44px] transition-all text-left
+   689→                  ${isSelected
+   690→                    ? 'border-emerald-500 bg-emerald-50'
+   691→                    : 'border-[#e2e8f0] hover:border-[#cbd5e1] bg-white'
+   692→                  }
+   693→                `}
+   694→              >
+   695→                <Wallet
+   696→                  className={`size-4 shrink-0 ${isSelected ? 'text-emerald-600' : 'text-gray-400'}`}
+   697→                />
+   698→                <span className={`text-xs font-medium truncate ${isSelected ? 'text-emerald-800' : 'text-gray-700'}`}>
+   699→                  {wallet.name}
+   700→                </span>
+   701→              </motion.button>
+   702→            );
+   703→          })}
+   704→        </div>
+   705→      </div>
+   706→    </motion.div>
+   707→  );
+   708→
+   709→  const renderCashForm = () => (
+   710→    <motion.div
+   711→      key="cash-form"
+   712→      initial={{ opacity: 0, height: 0 }}
+   713→      animate={{ opacity: 1, height: 'auto' }}
+   714→      exit={{ opacity: 0, height: 0 }}
+   715→      transition={{ duration: 0.2 }}
+   716→      className="overflow-hidden"
+   717→    >
+   718→      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+   719→        <div className="flex items-start gap-3">
+   720→          <div className="flex items-center justify-center size-8 rounded-lg bg-amber-100 text-amber-600 shrink-0 mt-0.5">
+   721→            <Truck className="size-4" />
+   722→          </div>
+   723→          <div>
+   724→            <p className="text-sm font-semibold text-amber-800">Cash on Pickup</p>
+   725→            <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+   726→              You will pay the full amount in cash when you pick up the item. Please keep the exact amount ready.
+   727→            </p>
+   728→          </div>
+   729→        </div>
+   730→        <div className="flex items-center gap-2 bg-amber-100/60 rounded-lg px-3 py-2.5 min-h-[44px]">
+   731→          <IndianRupee className="size-3.5 text-amber-700 shrink-0" />
+   732→          <p className="text-xs text-amber-800 font-medium">
+   733→            Amount to pay: <span className="font-bold">₹{formatCurrency(rentalData?.totalAmount ?? 0)}</span>
+   734→          </p>
+   735→        </div>
+   736→      </div>
+   737→    </motion.div>
+   738→  );
+   739→
+   740→  const renderMethodForm = () => {
+   741→    switch (selectedMethod) {
+   742→      case 'upi': return renderUPIForm();
+   743→      case 'card': return renderCardForm();
+   744→      case 'netbanking': return renderNetBankingForm();
+   745→      case 'wallet': return renderWalletForm();
+   746→      case 'cash': return renderCashForm();
+   747→      default: return null;
+   748→    }
+   749→  };
+   750→
+   751→  const renderSecurityBadges = () => (
+   752→    <div className="grid grid-cols-3 gap-2">
+   753→      <div className="flex flex-col items-center gap-1.5 py-2.5 rounded-lg bg-gray-50 border border-[#e2e8f0] min-h-[44px]">
+   754→        <Lock className="size-4 text-emerald-600" />
+   755→        <span className="text-[10px] font-semibold text-gray-600 text-center leading-tight">
+   756→          100% Secure Payments
+   757→        </span>
+   758→      </div>
+   759→      <div className="flex flex-col items-center gap-1.5 py-2.5 rounded-lg bg-gray-50 border border-[#e2e8f0] min-h-[44px]">
+   760→        <ShieldCheck className="size-4 text-emerald-600" />
+   761→        <span className="text-[10px] font-semibold text-gray-600 text-center leading-tight">
+   762→          RentCart Buyer Protection
+   763→        </span>
+   764→      </div>
+   765→      <div className="flex flex-col items-center gap-1.5 py-2.5 rounded-lg bg-gray-50 border border-[#e2e8f0] min-h-[44px]">
+   766→        <IndianRupee className="size-4 text-emerald-600" />
+   767→        <span className="text-[10px] font-semibold text-gray-600 text-center leading-tight">
+   768→          Money-back guarantee
+   769→        </span>
+   770→      </div>
+   771→    </div>
+   772→  );
+   773→
+   774→  const renderProcessingOverlay = () => (
+   775→    <motion.div
+   776→      key="processing-overlay"
+   777→      initial={{ opacity: 0 }}
+   778→      animate={{ opacity: 1 }}
+   779→      exit={{ opacity: 0 }}
+   780→      className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white rounded-t-2xl md:rounded-lg"
+   781→    >
+   782→      <div className="relative mb-6">
+   783→        <div className="size-16 rounded-full border-4 border-emerald-100 border-t-emerald-500 animate-spin" />
+   784→        <Loader2 className="absolute inset-0 m-auto size-6 text-emerald-500 animate-spin" style={{ animationDirection: 'reverse' }} />
+   785→      </div>
+   786→      <h3 className="text-lg font-bold text-gray-900">Processing your payment...</h3>
+   787→      <p className="text-sm text-gray-500 mt-1.5">Please do not close this window</p>
+   788→    </motion.div>
+   789→  );
+   790→
+   791→  const renderSuccessOverlay = () => (
+   792→    <motion.div
+   793→      key="success-overlay"
+   794→      initial={{ opacity: 0, scale: 0.9 }}
+   795→      animate={{ opacity: 1, scale: 1 }}
+   796→      exit={{ opacity: 0, scale: 0.9 }}
+   797→      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+   798→      className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white rounded-t-2xl md:rounded-lg p-6"
+   799→    >
+   800→      <motion.div
+   801→        initial={{ scale: 0 }}
+   802→        animate={{ scale: 1 }}
+   803→        transition={{ type: 'spring', stiffness: 400, damping: 20, delay: 0.1 }}
+   804→        className="mb-5"
+   805→      >
+   806→        <div className="flex items-center justify-center size-20 rounded-full bg-emerald-100">
+   807→          <CheckCircle2 className="size-11 text-emerald-600" strokeWidth={2.5} />
+   808→        </div>
+   809→      </motion.div>
+   810→
+   811→      <h3 className="text-xl font-bold text-gray-900">Payment Successful!</h3>
+   812→      <p className="text-sm text-gray-500 mt-1.5 text-center">
+   813→        Your rental request has been sent to the owner
+   814→      </p>
+   815→
+   816→      <div className="mt-4 px-4 py-2.5 rounded-lg bg-gray-50 border border-[#e2e8f0] w-full max-w-xs">
+   817→        <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Transaction ID</p>
+   818→        <p className="text-sm font-mono font-semibold text-gray-700 mt-0.5">{txnId}</p>
+   819→      </div>
+   820→
+   821→      <Button
+   822→        onClick={handleSuccess}
+   823→        className="mt-6 w-full max-w-xs bg-emerald-600 hover:bg-emerald-700 text-white h-11 font-semibold"
+   824→      >
+   825→        View My Rentals
+   826→        <ChevronRight className="size-4 ml-1" />
+   827→      </Button>
+   828→    </motion.div>
+   829→  );
+   830→
+   831→  const renderCheckoutContent = () => (
+   832→    <div className="relative">
+   833→      {/* Processing & Success overlays */}
+   834→      <AnimatePresence>
+   835→        {step === 'processing' && renderProcessingOverlay()}
+   836→        {step === 'success' && renderSuccessOverlay()}
+   837→      </AnimatePresence>
+   838→
+   839→      {/* Checkout content */}
+   840→      <div className="relative">
+   841→        {/* Header */}
+   842→        <div className="sticky top-0 z-10 bg-white border-b border-[#e2e8f0] px-4 sm:px-5 py-3.5 flex items-center justify-between">
+   843→          <div className="flex items-center gap-2">
+   844→            <div className="flex items-center justify-center size-7 rounded-lg bg-emerald-100">
+   845→              <Lock className="size-3.5 text-emerald-600" />
+   846→            </div>
+   847→            <span className="text-base font-bold text-gray-900">
+   848→              Secure Checkout
+   849→            </span>
+   850→          </div>
+   851→          <button
+   852→            type="button"
+   853→            onClick={handleClose}
+   854→            disabled={processing}
+   855→            className="flex items-center justify-center size-8 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+   856→          >
+   857→            <X className="size-4 text-gray-500" />
+   858→          </button>
+   859→        </div>
+   860→
+   861→        {/* Scrollable content */}
+   862→        <div className={isMobile ? 'max-h-[50vh] overflow-y-auto' : 'max-h-[70vh] overflow-y-auto'}>
+   863→          <div className="p-4 sm:p-5 space-y-4 sm:space-y-5">
+   864→            {/* Order Summary */}
+   865→            {renderOrderSummary()}
+   866→
+   867→            {/* Payment Methods */}
+   868→            <div>
+   869→              <h3 className="text-sm font-bold text-gray-900 mb-3">Payment Method</h3>
+   870→              {renderMethodCards()}
+   871→            </div>
+   872→
+   873→            {/* Method-specific form */}
+   874→            <AnimatePresence mode="wait">
+   875→              {renderMethodForm()}
+   876→            </AnimatePresence>
+   877→
+   878→            {/* Security Badges */}
+   879→            {renderSecurityBadges()}
+   880→
+   881→            {/* Extra bottom padding for mobile nav clearance */}
+   882→            {isMobile && <div className="h-2" />}
+   883→          </div>
+   884→        </div>
+   885→
+   886→        {/* Sticky footer with pay button */}
+   887→        <div className="sticky bottom-0 bg-white border-t border-[#e2e8f0] px-4 sm:px-5 py-3 sm:py-3.5 safe-area-bottom">
+   888→          <div className="flex items-center justify-between mb-2.5">
+   889→            <span className="text-xs sm:text-sm text-gray-500">Total Payable</span>
+   890→            <div className="flex items-baseline gap-1">
+   891→              <span className="text-base sm:text-lg font-bold text-gray-900">
+   892→                ₹{formatCurrency(rentalData.totalAmount)}
+   893→              </span>
+   894→            </div>
+   895→          </div>
+   896→          <Button
+   897→            onClick={handlePayment}
+   898→            disabled={isPayDisabled()}
+   899→            className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+   900→          >
+   901→            {processing ? (
+   902→              <>
+   903→                <Loader2 className="size-4 animate-spin mr-2" />
+   904→                Processing...
+   905→              </>
+   906→            ) : (
+   907→              <>
+   908→                <Lock className="size-4 mr-2" />
+   909→                {getPaymentButtonLabel()}
+   910→              </>
+   911→            )}
+   912→          </Button>
+   913→        </div>
+   914→      </div>
+   915→    </div>
+   916→  );
+   917→
+   918→  if (!rentalData) return null;
+   919→
+   920→  return (
+   921→    <>
+   922→      {/* Mobile: Vaul Drawer */}
+   923→      <Drawer
+   924→        open={open && isMobile}
+   925→        onOpenChange={(isOpen) => {
+   926→          if (!isOpen) handleClose();
+   927→        }}
+   928→      >
+   929→        <DrawerContent className="max-h-[92vh]">
+   930→          <DrawerHeader className="sr-only">
+   931→            <DrawerTitle>Secure Checkout</DrawerTitle>
+   932→            <DrawerDescription>Complete your payment</DrawerDescription>
+   933→          </DrawerHeader>
+   934→          {renderCheckoutContent()}
+   935→        </DrawerContent>
+   936→      </Drawer>
+   937→
+   938→      {/* Desktop: Dialog */}
+   939→      <Dialog
+   940→        open={open && !isMobile}
+   941→        onOpenChange={(isOpen) => {
+   942→          if (!isOpen) handleClose();
+   943→        }}
+   944→      >
+   945→        <DialogContent
+   946→          className="sm:max-w-[520px] p-0 gap-0 overflow-hidden"
+   947→          onInteractOutside={(e) => {
+   948→            if (processing) e.preventDefault();
+   949→          }}
+   950→          onEscapeKeyDown={(e) => {
+   951→            if (processing) e.preventDefault();
+   952→          }}
+   953→        >
+   954→          <DialogHeader className="sr-only">
+   955→            <DialogTitle>Secure Checkout</DialogTitle>
+   956→          </DialogHeader>
+   957→          {renderCheckoutContent()}
+   958→        </DialogContent>
+   959→      </Dialog>
+   960→    </>
+   961→  );
+   962→}
+   963→

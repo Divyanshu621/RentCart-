@@ -1,0 +1,539 @@
+   400→                  <Icon className="h-32 w-32 text-white/60" strokeWidth={1.5} />
+   401→                </div>
+   402→              )}
+   403→            </div>
+   404→          </motion.div>
+   405→
+   406→          {/* Right: Product Info */}
+   407→          <motion.div
+   408→            initial={{ opacity: 0, y: 20 }}
+   409→            animate={{ opacity: 1, y: 0 }}
+   410→            transition={{ duration: 0.4, delay: 0.1 }}
+   411→            className="space-y-5"
+   412→          >
+   413→            {/* Title & Badges */}
+   414→            <div>
+   415→              <div className="flex items-start gap-3 mb-3">
+   416→                <div className="flex-1">
+   417→                  <h1 className="text-2xl font-bold text-slate-900 leading-tight">{product.title}</h1>
+   418→                  <div className="flex flex-wrap items-center gap-2 mt-2">
+   419→                    <Badge variant="secondary" className="text-xs bg-slate-100 text-slate-700">
+   420→                      {product.category.name}
+   421→                    </Badge>
+   422→                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${conditionColors[product.condition] || 'bg-slate-100 text-slate-600'}`}>
+   423→                      {conditionLabels[product.condition] || product.condition}
+   424→                    </span>
+   425→                    {product.brand && (
+   426→                      <span className="text-xs text-slate-500">{product.brand}{product.model ? ` · ${product.model}` : ''}</span>
+   427→                    )}
+   428→                  </div>
+   429→                </div>
+   430→                <button
+   431→                  onClick={() => user && favMutation.mutate()}
+   432→                  className="p-2 rounded-full border border-slate-200 hover:bg-red-50 transition-colors"
+   433→                  aria-label="Toggle favorite"
+   434→                >
+   435→                  <Heart className={`h-5 w-5 ${effectiveFavorited ? 'fill-red-500 text-red-500' : 'text-slate-400'}`} />
+   436→                </button>
+   437→              </div>
+   438→
+   439→              {/* Rating */}
+   440→              <div className="flex items-center gap-2">
+   441→                <div className="flex items-center gap-1">
+   442→                  {Array.from({ length: 5 }, (_, i) => (
+   443→                    <Star
+   444→                      key={i}
+   445→                      className={`h-4 w-4 ${
+   446→                        i < Math.round(product.avgRating)
+   447→                          ? 'fill-amber-400 text-amber-400'
+   448→                          : 'fill-slate-200 text-slate-200'
+   449→                      }`}
+   450→                    />
+   451→                  ))}
+   452→                </div>
+   453→                <span className="text-sm font-medium text-slate-700">
+   454→                  {product.avgRating > 0 ? product.avgRating.toFixed(1) : 'No ratings yet'}
+   455→                </span>
+   456→                <span className="text-sm text-slate-400">
+   457→                  ({product.totalReviews} review{product.totalReviews !== 1 ? 's' : ''})
+   458→                </span>
+   459→                <span className="text-sm text-slate-400">·</span>
+   460→                <span className="text-sm text-slate-400">{product.totalRentals} rental{product.totalRentals !== 1 ? 's' : ''}</span>
+   461→              </div>
+   462→            </div>
+   463→
+   464→            <Separator />
+   465→
+   466→            {/* Price Section */}
+   467→            <div className="bg-white rounded-xl border border-slate-200 p-5">
+   468→              <div className="flex items-baseline gap-2 mb-3">
+   469→                <span className="text-3xl font-bold text-emerald-600">₹{product.dailyPrice.toLocaleString('en-IN')}</span>
+   470→                <span className="text-sm text-slate-400">/day</span>
+   471→              </div>
+   472→              {product.weeklyPrice && (
+   473→                <div className="flex items-baseline gap-2 mb-2">
+   474→                  <span className="text-lg font-semibold text-slate-700">₹{product.weeklyPrice.toLocaleString('en-IN')}</span>
+   475→                  <span className="text-sm text-slate-400">/week</span>
+   476→                  <Badge variant="secondary" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+   477→                    Save {Math.round((1 - product.weeklyPrice / (product.dailyPrice * 7)) * 100)}%
+   478→                  </Badge>
+   479→                </div>
+   480→              )}
+   481→              <div className="flex items-center gap-4 text-sm text-slate-500">
+   482→                <span>Security Deposit: <strong className="text-slate-700">₹{product.securityDeposit.toLocaleString('en-IN')}</strong></span>
+   483→                {product.deliveryAvailable && (
+   484→                  <span className="flex items-center gap-1 text-emerald-600">
+   485→                    <Truck className="h-4 w-4" />
+   486→                    Delivery ₹{product.deliveryFee.toLocaleString('en-IN')}
+   487→                  </span>
+   488→                )}
+   489→              </div>
+   490→            </div>
+   491→
+   492→            {/* Owner Info */}
+   493→            <Card className="border-slate-200">
+   494→              <CardContent className="p-4">
+   495→                <div className="flex items-center justify-between">
+   496→                  <div className="flex items-center gap-3">
+   497→                    <Avatar className="h-11 w-11">
+   498→                      <AvatarFallback className="bg-[#0f172a] text-white text-sm font-semibold">
+   499→                        {product.owner.name.charAt(0).toUpperCase()}
+   500→                      </AvatarFallback>
+   501→                    </Avatar>
+   502→                    <div>
+   503→                      <div className="flex items-center gap-1.5">
+   504→                        <span className="font-semibold text-slate-900 text-sm">{product.owner.name}</span>
+   505→                        {product.owner.isVerified && (
+   506→                          <ShieldCheck className="h-4 w-4 text-emerald-500" />
+   507→                        )}
+   508→                      </div>
+   509→                      <div className="flex items-center gap-2 text-xs text-slate-500">
+   510→                        <span className="flex items-center gap-0.5">
+   511→                          <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+   512→                          {product.owner.avgRating > 0 ? product.owner.avgRating.toFixed(1) : 'New'}
+   513→                        </span>
+   514→                        <span>·</span>
+   515→                        <span>{product.totalRentals} rentals</span>
+   516→                        <span>·</span>
+   517→                        <span>Trust: {product.owner.trustScore}%</span>
+   518→                      </div>
+   519→                    </div>
+   520→                  </div>
+   521→                  <Button
+   522→                    variant="outline"
+   523→                    size="sm"
+   524→                    onClick={handleMessage}
+   525→                    className="border-slate-200 text-slate-700 hover:bg-slate-50 gap-1.5"
+   526→                  >
+   527→                    <MessageCircle className="h-4 w-4" />
+   528→                    Message
+   529→                  </Button>
+   530→                </div>
+   531→              </CardContent>
+   532→            </Card>
+   533→
+   534→            {/* Location */}
+   535→            <div className="flex items-start gap-3 bg-white rounded-xl border border-slate-200 p-4">
+   536→              <MapPin className="h-5 w-5 text-slate-400 mt-0.5 shrink-0" />
+   537→              <div className="flex-1 min-w-0">
+   538→                <div className="text-sm font-medium text-slate-900">
+   539→                  {product.city?.name}{product.state?.name ? `, ${product.state.name}` : ''}
+   540→                </div>
+   541→                {product.pickupAddress && (
+   542→                  <p className="text-xs text-slate-500 mt-0.5">{product.pickupAddress}</p>
+   543→                )}
+   544→                <div className="flex flex-wrap gap-2 mt-2">
+   545→                  {product.deliveryAvailable && (
+   546→                    <Badge variant="secondary" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
+   547→                      <Truck className="h-3 w-3" />
+   548→                      Delivery Available
+   549→                    </Badge>
+   550→                  )}
+   551→                </div>
+   552→              </div>
+   553→            </div>
+   554→
+   555→            <Separator />
+   556→
+   557→            {/* Tabs: Description, Rules, Cancellation */}
+   558→            <Tabs defaultValue="description" className="w-full">
+   559→              <TabsList className="bg-slate-100 w-full h-10">
+   560→                <TabsTrigger value="description" className="text-xs sm:text-sm flex-1">Description</TabsTrigger>
+   561→                <TabsTrigger value="rules" className="text-xs sm:text-sm flex-1">Rental Rules</TabsTrigger>
+   562→                <TabsTrigger value="cancellation" className="text-xs sm:text-sm flex-1">Cancellation</TabsTrigger>
+   563→              </TabsList>
+   564→              <TabsContent value="description" className="mt-4">
+   565→                <div className="bg-white rounded-xl border border-slate-200 p-5">
+   566→                  <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
+   567→                    {product.description || 'No description provided.'}
+   568→                  </p>
+   569→                  <div className="grid grid-cols-2 gap-3 mt-4">
+   570→                    {product.brand && (
+   571→                      <div className="text-xs"><span className="text-slate-400">Brand:</span> <span className="font-medium text-slate-700">{product.brand}</span></div>
+   572→                    )}
+   573→                    {product.model && (
+   574→                      <div className="text-xs"><span className="text-slate-400">Model:</span> <span className="font-medium text-slate-700">{product.model}</span></div>
+   575→                    )}
+   576→                    {product.purchaseYear && (
+   577→                      <div className="text-xs"><span className="text-slate-400">Year:</span> <span className="font-medium text-slate-700">{product.purchaseYear}</span></div>
+   578→                    )}
+   579→                    <div className="text-xs"><span className="text-slate-400">Min Rental:</span> <span className="font-medium text-slate-700">{product.minRentalDays} day{product.minRentalDays > 1 ? 's' : ''}</span></div>
+   580→                    <div className="text-xs"><span className="text-slate-400">Max Rental:</span> <span className="font-medium text-slate-700">{product.maxRentalDays} days</span></div>
+   581→                  </div>
+   582→                </div>
+   583→              </TabsContent>
+   584→              <TabsContent value="rules" className="mt-4">
+   585→                <div className="bg-white rounded-xl border border-slate-200 p-5">
+   586→                  <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
+   587→                    {product.rentalRules || 'No specific rental rules provided by the owner.'}
+   588→                  </p>
+   589→                </div>
+   590→              </TabsContent>
+   591→              <TabsContent value="cancellation" className="mt-4">
+   592→                <div className="bg-white rounded-xl border border-slate-200 p-5">
+   593→                  <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
+   594→                    {product.cancellationPolicy || 'Standard cancellation policy applies. Please contact the owner for details.'}
+   595→                  </p>
+   596→                </div>
+   597→              </TabsContent>
+   598→            </Tabs>
+   599→
+   600→            <Separator />
+   601→
+   602→            {/* Rental Calculator */}
+   603→            <Card className="border-slate-200 shadow-sm">
+   604→              <CardHeader className="pb-3">
+   605→                <CardTitle className="text-base flex items-center gap-2">
+   606→                  <CalendarDays className="h-5 w-5 text-emerald-600" />
+   607→                  Rental Calculator
+   608→                </CardTitle>
+   609→              </CardHeader>
+   610→              <CardContent className="space-y-4">
+   611→                {/* Date Pickers */}
+   612→                <div className="grid grid-cols-2 gap-3">
+   613→                  <div className="space-y-1.5">
+   614→                    <Label className="text-xs font-medium text-slate-700">Start Date</Label>
+   615→                    <Popover open={calOpen === 'start'} onOpenChange={(o) => setCalOpen(o ? 'start' : null)}>
+   616→                      <PopoverTrigger asChild>
+   617→                        <Button
+   618→                          variant="outline"
+   619→                          className="w-full justify-start text-left font-normal h-10 border-slate-200"
+   620→                        >
+   621→                          {startDate ? format(startDate, 'dd MMM yyyy') : 'Pick a date'}
+   622→                        </Button>
+   623→                      </PopoverTrigger>
+   624→                      <PopoverContent className="w-auto p-0" align="start">
+   625→                        <Calendar
+   626→                          mode="single"
+   627→                          selected={startDate}
+   628→                          onSelect={(d) => {
+   629→                            setStartDate(d);
+   630→                            if (d && endDate && differenceInDays(endDate, d) < 0) {
+   631→                              setEndDate(undefined);
+   632→                            }
+   633→                            setCalOpen(null);
+   634→                          }}
+   635→                          disabled={{ before: today }}
+   636→                        />
+   637→                      </PopoverContent>
+   638→                    </Popover>
+   639→                  </div>
+   640→                  <div className="space-y-1.5">
+   641→                    <Label className="text-xs font-medium text-slate-700">End Date</Label>
+   642→                    <Popover open={calOpen === 'end'} onOpenChange={(o) => setCalOpen(o ? 'end' : null)}>
+   643→                      <PopoverTrigger asChild>
+   644→                        <Button
+   645→                          variant="outline"
+   646→                          className={`w-full justify-start text-left font-normal h-10 border-slate-200 ${!startDate ? 'opacity-50 cursor-not-allowed' : ''}`}
+   647→                          disabled={!startDate}
+   648→                        >
+   649→                          {endDate ? format(endDate, 'dd MMM yyyy') : 'Pick a date'}
+   650→                        </Button>
+   651→                      </PopoverTrigger>
+   652→                      <PopoverContent className="w-auto p-0" align="start">
+   653→                        <Calendar
+   654→                          mode="single"
+   655→                          selected={endDate}
+   656→                          onSelect={(d) => {
+   657→                            setEndDate(d);
+   658→                            setCalOpen(null);
+   659→                          }}
+   660→                          disabled={{ before: addDays(startDate!, product?.minRentalDays ? product.minRentalDays : 1) }}
+   661→                        />
+   662→                      </PopoverContent>
+   663→                    </Popover>
+   664→                  </div>
+   665→                </div>
+   666→
+   667→                {/* Date Validation Error */}
+   668→                {startDate && endDate && dateValidationError && (
+   669→                  <motion.div
+   670→                    initial={{ opacity: 0, y: -5 }}
+   671→                    animate={{ opacity: 1, y: 0 }}
+   672→                    className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200"
+   673→                  >
+   674→                    <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+   675→                    <span className="text-sm text-red-700">{dateValidationError}</span>
+   676→                  </motion.div>
+   677→                )}
+   678→
+   679→                {/* Calculation Breakdown */}
+   680→                {startDate && endDate && rentalCalc.days > 0 && (
+   681→                  <motion.div
+   682→                    initial={{ opacity: 0, height: 0 }}
+   683→                    animate={{ opacity: 1, height: 'auto' }}
+   684→                    className="space-y-3 bg-slate-50 rounded-lg p-4"
+   685→                  >
+   686→                    <div className="flex justify-between text-sm">
+   687→                      <span className="text-slate-600">Rental Duration</span>
+   688→                      <span className="font-medium text-slate-900">{rentalCalc.days} day{rentalCalc.days > 1 ? 's' : ''}</span>
+   689→                    </div>
+   690→                    <div className="flex justify-between text-sm">
+   691→                      <span className="text-slate-600">Daily Rate</span>
+   692→                      <span className="font-medium text-slate-900">₹{rentalCalc.dailyRate.toLocaleString('en-IN')}</span>
+   693→                    </div>
+   694→                    <div className="flex justify-between text-sm">
+   695→                      <span className="text-slate-600">Rental Amount</span>
+   696→                      <span className="font-medium text-slate-900">₹{rentalCalc.rentalAmount.toLocaleString('en-IN')}</span>
+   697→                    </div>
+   698→                    <div className="flex justify-between text-sm">
+   699→                      <span className="text-slate-600">Platform Fee (10%)</span>
+   700→                      <span className="font-medium text-slate-900">₹{rentalCalc.platformFee.toLocaleString('en-IN')}</span>
+   701→                    </div>
+   702→                    <div className="flex justify-between text-sm">
+   703→                      <span className="text-slate-600">Tax (18% GST)</span>
+   704→                      <span className="font-medium text-slate-900">₹{rentalCalc.tax.toLocaleString('en-IN')}</span>
+   705→                    </div>
+   706→                    {rentalCalc.deliveryFee > 0 && (
+   707→                      <div className="flex justify-between text-sm">
+   708→                        <span className="text-slate-600">Delivery Fee</span>
+   709→                        <span className="font-medium text-slate-900">₹{rentalCalc.deliveryFee.toLocaleString('en-IN')}</span>
+   710→                      </div>
+   711→                    )}
+   712→                    <div className="flex justify-between text-sm">
+   713→                      <span className="text-slate-600">Security Deposit</span>
+   714→                      <span className="font-medium text-slate-900">₹{rentalCalc.securityDeposit.toLocaleString('en-IN')}</span>
+   715→                    </div>
+   716→                    {couponApplied && rentalCalc.discount > 0 && (
+   717→                      <div className="flex justify-between text-sm text-emerald-600">
+   718→                        <span className="font-medium">Coupon Discount</span>
+   719→                        <span className="font-medium">-₹{rentalCalc.discount.toLocaleString('en-IN')}</span>
+   720→                      </div>
+   721→                    )}
+   722→                    <Separator />
+   723→                    <div className="flex justify-between text-base font-bold">
+   724→                      <span className="text-slate-900">Total</span>
+   725→                      <span className="text-emerald-600">₹{rentalCalc.total.toLocaleString('en-IN')}</span>
+   726→                    </div>
+   727→                  </motion.div>
+   728→                )}
+   729→
+   730→                {/* Coupon Code */}
+   731→                <div className="flex gap-2">
+   732→                  <div className="relative flex-1">
+   733→                    <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+   734→                    <Input
+   735→                      placeholder="Coupon code"
+   736→                      value={couponCode}
+   737→                      onChange={(e) => { setCouponCode(e.target.value); setCouponApplied(false); setCouponDiscount(0); }}
+   738→                      className="pl-9 h-10 border-slate-200"
+   739→                      disabled={!startDate || !endDate || !isDateValid}
+   740→                    />
+   741→                  </div>
+   742→                  <Button
+   743→                    variant="outline"
+   744→                    onClick={handleApplyCoupon}
+   745→                    disabled={!couponCode.trim() || !startDate || !endDate || !isDateValid || couponMutation.isPending}
+   746→                    className="h-10 border-slate-200"
+   747→                  >
+   748→                    {couponMutation.isPending ? 'Applying...' : 'Apply'}
+   749→                  </Button>
+   750→                </div>
+   751→                {couponApplied && (
+   752→                  <div className="flex items-center gap-1.5 text-xs text-emerald-600">
+   753→                    <CheckCircle2 className="h-3.5 w-3.5" />
+   754→                    Coupon applied! You save ₹{couponDiscount.toLocaleString('en-IN')}
+   755→                  </div>
+   756→                )}
+   757→                {couponMutation.isError && (
+   758→                  <div className="flex items-center gap-1.5 text-xs text-red-600">
+   759→                    <XCircle className="h-3.5 w-3.5" />
+   760→                    Invalid coupon code
+   761→                  </div>
+   762→                )}
+   763→
+   764→                {/* Rent Now CTA */}
+   765→                <Button
+   766→                  size="lg"
+   767→                  className={`w-full h-12 text-base font-semibold ${
+   768→                    isNotApproved || !startDate || !endDate || !isDateValid
+   769→                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+   770→                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+   771→                  }`}
+   772→                  onClick={handleRentNow}
+   773→                  disabled={isNotApproved || !startDate || !endDate || !isDateValid || createRentalMutation.isPending}
+   774→                >
+   775→                  {createRentalMutation.isPending
+   776→                    ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Creating Rental...</>
+   777→                    : isNotApproved
+   778→                      ? 'Not Available for Rental'
+   779→                      : !startDate
+   780→                      ? 'Select Start Date'
+   781→                      : !endDate
+   782→                        ? 'Select End Date'
+   783→                          : dateValidationError || 'Rent Now'}
+   784→                </Button>
+   785→
+   786→                {!user && startDate && endDate && rentalCalc.days > 0 && (
+   787→                  <p className="text-xs text-center text-slate-500">
+   788→                    You&apos;ll need to sign in to complete the rental
+   789→                  </p>
+   790→                )}
+   791→              </CardContent>
+   792→            </Card>
+   793→          </motion.div>
+   794→        </div>
+   795→
+   796→        {/* Availability Calendar & Reviews - Below */}
+   797→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-10">
+   798→          {/* Availability Calendar */}
+   799→          <motion.div
+   800→            initial={{ opacity: 0, y: 20 }}
+   801→            animate={{ opacity: 1, y: 0 }}
+   802→            transition={{ duration: 0.4, delay: 0.2 }}
+   803→          >
+   804→            <Card className="border-slate-200">
+   805→              <CardHeader className="pb-3">
+   806→                <CardTitle className="text-base flex items-center gap-2">
+   807→                  <Clock className="h-5 w-5 text-emerald-600" />
+   808→                  Availability
+   809→                </CardTitle>
+   810→              </CardHeader>
+   811→              <CardContent>
+   812→                <div className="flex justify-center">
+   813→                  <Calendar
+   814→                    mode="default"
+   815→                    disabled={[{ before: today }]}
+   816→                    className="rounded-md border"
+   817→                    components={{
+   818→                      DayButton: AvailabilityDayButton,
+   819→                    }}
+   820→                  />
+   821→                </div>
+   822→                <div className="flex items-center gap-4 mt-4 text-xs text-slate-500">
+   823→                  <div className="flex items-center gap-1.5">
+   824→                    <div className="w-3 h-3 rounded bg-emerald-100 border border-emerald-200" />
+   825→                    <span>Available</span>
+   826→                  </div>
+   827→                  <div className="flex items-center gap-1.5">
+   828→                    <div className="w-3 h-3 rounded bg-red-100 border border-red-200" />
+   829→                    <span>Unavailable</span>
+   830→                  </div>
+   831→                </div>
+   832→              </CardContent>
+   833→            </Card>
+   834→          </motion.div>
+   835→
+   836→          {/* Reviews Section */}
+   837→          <motion.div
+   838→            initial={{ opacity: 0, y: 20 }}
+   839→            animate={{ opacity: 1, y: 0 }}
+   840→            transition={{ duration: 0.4, delay: 0.3 }}
+   841→          >
+   842→            <Card className="border-slate-200">
+   843→              <CardHeader className="pb-3">
+   844→                <CardTitle className="text-base flex items-center gap-2">
+   845→                  <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
+   846→                  Reviews ({reviewsTotal})
+   847→                </CardTitle>
+   848→              </CardHeader>
+   849→              <CardContent className="space-y-5">
+   850→                {/* Star Breakdown */}
+   851→                <div className="flex items-start gap-4">
+   852→                  <div className="text-center">
+   853→                    <div className="text-3xl font-bold text-slate-900">
+   854→                      {product.avgRating > 0 ? product.avgRating.toFixed(1) : '—'}
+   855→                    </div>
+   856→                    <div className="flex items-center gap-0.5 mt-1">
+   857→                      {Array.from({ length: 5 }, (_, i) => (
+   858→                        <Star
+   859→                          key={i}
+   860→                          className={`h-3.5 w-3.5 ${
+   861→                            i < Math.round(product.avgRating) ? 'fill-amber-400 text-amber-400' : 'fill-slate-200 text-slate-200'
+   862→                          }`}
+   863→                        />
+   864→                      ))}
+   865→                    </div>
+   866→                    <p className="text-xs text-slate-400 mt-1">{reviewsTotal} review{reviewsTotal !== 1 ? 's' : ''}</p>
+   867→                  </div>
+   868→                  <div className="flex-1 space-y-1.5">
+   869→                    {[5, 4, 3, 2, 1].map((star) => {
+   870→                      const count = starBreakdown[star - 1];
+   871→                      const pct = reviews.length > 0 ? (count / reviews.length) * 100 : 0;
+   872→                      return (
+   873→                        <div key={star} className="flex items-center gap-2 text-xs">
+   874→                          <span className="w-3 text-right text-slate-600">{star}</span>
+   875→                          <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+   876→                          <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+   877→                            <div
+   878→                              className="h-full bg-amber-400 rounded-full transition-all duration-500"
+   879→                              style={{ width: `${pct}%` }}
+   880→                            />
+   881→                          </div>
+   882→                          <span className="w-6 text-right text-slate-400">{count}</span>
+   883→                        </div>
+   884→                      );
+   885→                    })}
+   886→                  </div>
+   887→                </div>
+   888→
+   889→                <Separator />
+   890→
+   891→                {/* Review List */}
+   892→                <div className="space-y-4 max-h-80 overflow-y-auto pr-1">
+   893→                  {reviews.length === 0 ? (
+   894→                    <p className="text-sm text-slate-400 text-center py-6">No reviews yet. Be the first to review this item!</p>
+   895→                  ) : (
+   896→                    reviews.map((review) => (
+   897→                      <div key={review.id} className="pb-4 border-b border-slate-100 last:border-0 last:pb-0">
+   898→                        <div className="flex items-center gap-2.5 mb-2">
+   899→                          <Avatar className="h-8 w-8">
+   900→                            <AvatarFallback className="bg-slate-100 text-slate-600 text-xs font-semibold">
+   901→                              {review.reviewer.name.charAt(0).toUpperCase()}
+   902→                            </AvatarFallback>
+   903→                          </Avatar>
+   904→                          <div className="flex-1 min-w-0">
+   905→                            <div className="flex items-center gap-2">
+   906→                              <span className="text-sm font-medium text-slate-900 truncate">{review.reviewer.name}</span>
+   907→                              <span className="text-xs text-slate-400">
+   908→                                {format(new Date(review.createdAt), 'dd MMM yyyy')}
+   909→                              </span>
+   910→                            </div>
+   911→                            <div className="flex items-center gap-0.5">
+   912→                              {Array.from({ length: 5 }, (_, i) => (
+   913→                                <Star
+   914→                                  key={i}
+   915→                                  className={`h-3 w-3 ${
+   916→                                    i < review.rating ? 'fill-amber-400 text-amber-400' : 'fill-slate-200 text-slate-200'
+   917→                                  }`}
+   918→                                />
+   919→                              ))}
+   920→                            </div>
+   921→                          </div>
+   922→                        </div>
+   923→                        {review.comment && (
+   924→                          <p className="text-sm text-slate-600 leading-relaxed ml-10">{review.comment}</p>
+   925→                        )}
+   926→                      </div>
+   927→                    ))
+   928→                  )}
+   929→                </div>
+   930→              </CardContent>
+   931→            </Card>
+   932→          </motion.div>
+   933→        </div>
+   934→      </div>
+   935→    </div>
+   936→  );
+   937→}
+   938→

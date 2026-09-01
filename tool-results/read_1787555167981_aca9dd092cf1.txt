@@ -1,0 +1,740 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useCallback, useRef } from 'react';
+     4→import { useAppStore } from '@/store';
+     5→import { api } from '@/lib/api';
+     6→import { toast } from 'sonner';
+     7→import type { SellerKyc as SellerKycType, KycDocStatus, BusinessType, User as UserType } from '@/types';
+     8→
+     9→import { Button } from '@/components/ui/button';
+    10→import { Input } from '@/components/ui/input';
+    11→import { Label } from '@/components/ui/label';
+    12→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+    13→import { Badge } from '@/components/ui/badge';
+    14→import { Separator } from '@/components/ui/separator';
+    15→import {
+    16→  Select,
+    17→  SelectContent,
+    18→  SelectItem,
+    19→  SelectTrigger,
+    20→  SelectValue,
+    21→} from '@/components/ui/select';
+    22→import { Textarea } from '@/components/ui/textarea';
+    23→import { Progress } from '@/components/ui/progress';
+    24→
+    25→import {
+    26→  Shield,
+    27→  FileCheck,
+    28→  CreditCard,
+    29→  Building2,
+    30→  Upload,
+    31→  X,
+    32→  CheckCircle2,
+    33→  Clock,
+    34→  AlertTriangle,
+    35→  ArrowLeft,
+    36→  Loader2,
+    37→  Eye,
+    38→  Camera,
+    39→  Image as ImageIcon,
+    40→  ChevronRight,
+    41→  AlertCircle,
+    42→} from 'lucide-react';
+    43→
+    44→// ─── Document Upload Component ───────────────────────────────
+    45→function DocumentUpload({
+    46→  label,
+    47→  description,
+    48→  value,
+    49→  onChange,
+    50→  required,
+    51→  disabled,
+    52→}: {
+    53→  label: string;
+    54→  description: string;
+    55→  value?: string;
+    56→  onChange: (base64: string) => void;
+    57→  required?: boolean;
+    58→  disabled?: boolean;
+    59→}) {
+    60→  const inputRef = useRef<HTMLInputElement>(null);
+    61→  const [localPreview, setLocalPreview] = useState<string | null>(null);
+    62→  const [dragOver, setDragOver] = useState(false);
+    63→  const [showPreview, setShowPreview] = useState(false);
+    64→
+    65→  // Use local upload state, fallback to parent value
+    66→  const preview = localPreview || (value || null);
+    67→
+    68→  const handleFile = useCallback((file: File) => {
+    69→    if (!file.type.startsWith('image/')) {
+    70→      toast.error('Please upload an image file (JPG, PNG)');
+    71→      return;
+    72→    }
+    73→    if (file.size > 5 * 1024 * 1024) {
+    74→      toast.error('File size must be less than 5MB');
+    75→      return;
+    76→    }
+    77→    const reader = new FileReader();
+    78→    reader.onload = (e) => {
+    79→      const result = e.target?.result as string;
+    80→      setLocalPreview(result);
+    81→      onChange(result);
+    82→    };
+    83→    reader.readAsDataURL(file);
+    84→  }, [onChange]);
+    85→
+    86→  const handleDrop = useCallback((e: React.DragEvent) => {
+    87→    e.preventDefault();
+    88→    setDragOver(false);
+    89→    const file = e.dataTransfer.files[0];
+    90→    if (file) handleFile(file);
+    91→  }, [handleFile]);
+    92→
+    93→  if (preview) {
+    94→    return (
+    95→      <div className="relative">
+    96→        <div
+    97→          className="relative rounded-xl overflow-hidden border-2 border-emerald-200 bg-emerald-50/50 cursor-pointer group"
+    98→          onClick={() => !disabled && setShowPreview(!showPreview)}
+    99→        >
+   100→          <div className="flex items-center gap-3 p-3">
+   101→            <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 shrink-0">
+   102→              <img src={preview} alt={label} className="w-full h-full object-cover" />
+   103→            </div>
+   104→            <div className="flex-1 min-w-0">
+   105→              <p className="text-sm font-medium text-emerald-800">{label}</p>
+   106→              <p className="text-xs text-emerald-600 mt-0.5">Document uploaded successfully</p>
+   107→            </div>
+   108→            <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+   109→          </div>
+   110→        </div>
+   111→        {!disabled && (
+   112→          <button
+   113→            onClick={(e) => {
+   114→              e.stopPropagation();
+   115→              setLocalPreview(null);
+   116→              onChange('');
+   117→            }}
+   118→            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-sm hover:bg-red-600 transition-colors"
+   119→          >
+   120→            <X className="w-3 h-3" />
+   121→          </button>
+   122→        )}
+   123→        {showPreview && !disabled && (
+   124→          <div
+   125→            className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4"
+   126→            onClick={() => setShowPreview(false)}
+   127→          >
+   128→            <div className="relative max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
+   129→              <img src={preview} alt={label} className="w-full rounded-xl" />
+   130→              <button
+   131→                onClick={() => setShowPreview(false)}
+   132→                className="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-lg"
+   133→              >
+   134→                <X className="w-4 h-4" />
+   135→              </button>
+   136→            </div>
+   137→          </div>
+   138→        )}
+   139→      </div>
+   140→    );
+   141→  }
+   142→
+   143→  return (
+   144→    <div
+   145→      className={`relative border-2 border-dashed rounded-xl p-4 text-center transition-all ${
+   146→        dragOver ? 'border-emerald-500 bg-emerald-50' : disabled ? 'border-gray-200 bg-gray-50' : 'border-gray-300 bg-gray-50/50 hover:border-emerald-400 hover:bg-emerald-50/30'
+   147→      } ${required && !value ? 'border-amber-300' : ''}`}
+   148→      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+   149→      onDragLeave={() => setDragOver(false)}
+   150→      onDrop={handleDrop}
+   151→      onClick={() => !disabled && inputRef.current?.click()}
+   152→    >
+   153→      <input
+   154→        ref={inputRef}
+   155→        type="file"
+   156→        accept="image/*"
+   157→        capture="environment"
+   158→        className="hidden"
+   159→        onChange={(e) => {
+   160→          const file = e.target.files?.[0];
+   161→          if (file) handleFile(file);
+   162→          e.target.value = '';
+   163→        }}
+   164→        disabled={disabled}
+   165→      />
+   166→      <div className="flex flex-col items-center gap-2">
+   167→        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${required && !value ? 'bg-amber-100' : 'bg-gray-100'}`}>
+   168→          <Camera className={`w-5 h-5 ${required && !value ? 'text-amber-600' : 'text-gray-400'}`} />
+   169→        </div>
+   170→        <div>
+   171→          <p className="text-sm font-medium text-[#0f172a]">{label} {required && <span className="text-red-500">*</span>}</p>
+   172→          <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+   173→        </div>
+   174→        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+   175→          <ImageIcon className="w-3.5 h-3.5" />
+   176→          <span>JPG, PNG up to 5MB</span>
+   177→        </div>
+   178→      </div>
+   179→    </div>
+   180→  );
+   181→}
+   182→
+   183→// ─── Status Banner ───────────────────────────────────────────
+   184→function StatusBanner({ status, rejectionReason }: { status: KycDocStatus; rejectionReason?: string }) {
+   185→  const configs: Record<string, { icon: React.ReactNode; color: string; bg: string; border: string; title: string; desc: string }> = {
+   186→    DRAFT: {
+   187→      icon: <FileCheck className="w-5 h-5" />,
+   188→      color: 'text-amber-700',
+   189→      bg: 'bg-amber-50',
+   190→      border: 'border-amber-200',
+   191→      title: 'Complete Your KYC Verification',
+   192→      desc: 'Upload your documents below to start selling on RentCart. All fields marked with * are required.',
+   193→    },
+   194→    SUBMITTED: {
+   195→      icon: <Clock className="w-5 h-5" />,
+   196→      color: 'text-blue-700',
+   197→      bg: 'bg-blue-50',
+   198→      border: 'border-blue-200',
+   199→      title: 'KYC Submitted for Review',
+   200→      desc: 'Your documents are being reviewed by our team. This usually takes 1-2 business days.',
+   201→    },
+   202→    UNDER_REVIEW: {
+   203→      icon: <Eye className="w-5 h-5" />,
+   204→      color: 'text-blue-700',
+   205→      bg: 'bg-blue-50',
+   206→      border: 'border-blue-200',
+   207→      title: 'KYC Under Review',
+   208→      desc: 'An admin is currently reviewing your documents. You will be notified once the review is complete.',
+   209→    },
+   210→    VERIFIED: {
+   211→      icon: <CheckCircle2 className="w-5 h-5" />,
+   212→      color: 'text-emerald-700',
+   213→      bg: 'bg-emerald-50',
+   214→      border: 'border-emerald-200',
+   215→      title: 'KYC Verified Successfully',
+   216→      desc: 'Your seller account is fully verified. You can now list items and accept rental orders.',
+   217→    },
+   218→    REJECTED: {
+   219→      icon: <AlertCircle className="w-5 h-5" />,
+   220→      color: 'text-red-700',
+   221→      bg: 'bg-red-50',
+   222→      border: 'border-red-200',
+   223→      title: 'KYC Verification Failed',
+   224→      desc: rejectionReason || 'Your documents did not meet our verification standards. Please review and resubmit.',
+   225→    },
+   226→  };
+   227→
+   228→  const config = configs[status] || configs.DRAFT;
+   229→
+   230→  return (
+   231→    <div className={`${config.bg} border ${config.border} rounded-xl p-4 sm:p-5`}>
+   232→      <div className="flex items-start gap-3">
+   233→        <div className={`mt-0.5 ${config.color}`}>{config.icon}</div>
+   234→        <div className="flex-1">
+   235→          <h3 className={`font-semibold text-sm ${config.color}`}>{config.title}</h3>
+   236→          <p className={`text-xs mt-1 ${config.color}/80 leading-relaxed`}>{config.desc}</p>
+   237→        </div>
+   238→        {status === 'VERIFIED' && (
+   239→          <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 shrink-0">
+   240→            <CheckCircle2 className="w-3 h-3 mr-1" /> Verified
+   241→          </Badge>
+   242→        )}
+   243→      </div>
+   244→    </div>
+   245→  );
+   246→}
+   247→
+   248→// ─── Steps Indicator ─────────────────────────────────────────
+   249→function StepsIndicator({ currentStep }: { currentStep: number }) {
+   250→  const steps = ['Identity', 'Bank Details', 'Business Info'];
+   251→  return (
+   252→    <div className="flex items-center gap-1 sm:gap-2">
+   253→      {steps.map((label, i) => (
+   254→        <div key={label} className="flex items-center gap-1 sm:gap-2">
+   255→          <div className="flex items-center gap-1.5">
+   256→            <div
+   257→              className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+   258→                i < currentStep
+   259→                  ? 'bg-emerald-500 text-white'
+   260→                  : i === currentStep
+   261→                  ? 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-500'
+   262→                  : 'bg-gray-100 text-gray-400'
+   263→              }`}
+   264→            >
+   265→              {i < currentStep ? <CheckCircle2 className="w-3.5 h-3.5" /> : i + 1}
+   266→            </div>
+   267→            <span className={`text-xs sm:text-sm font-medium hidden sm:block ${i <= currentStep ? 'text-[#0f172a]' : 'text-gray-400'}`}>
+   268→              {label}
+   269→            </span>
+   270→          </div>
+   271→          {i < steps.length - 1 && (
+   272→            <ChevronRight className={`w-4 h-4 ${i < currentStep ? 'text-emerald-400' : 'text-gray-300'}`} />
+   273→          )}
+   274→        </div>
+   275→      ))}
+   276→    </div>
+   277→  );
+   278→}
+   279→
+   280→// ─── Main Component ──────────────────────────────────────────
+   281→export default function SellerKycPage() {
+   282→  const { user, navigate, setUser } = useAppStore();
+   283→  const [kyc, setKyc] = useState<SellerKycType | null>(null);
+   284→  const [loading, setLoading] = useState(true);
+   285→  const [submitting, setSubmitting] = useState(false);
+   286→  const [currentStep, setCurrentStep] = useState(0);
+   287→
+   288→  // Form state
+   289→  const [aadhaarNumber, setAadhaarNumber] = useState('');
+   290→  const [panNumber, setPanNumber] = useState('');
+   291→  const [gstNumber, setGstNumber] = useState('');
+   292→  const [aadhaarFront, setAadhaarFront] = useState('');
+   293→  const [aadhaarBack, setAadhaarBack] = useState('');
+   294→  const [panCard, setPanCard] = useState('');
+   295→  const [bankAccountNo, setBankAccountNo] = useState('');
+   296→  const [bankIfsc, setBankIfsc] = useState('');
+   297→  const [bankName, setBankName] = useState('');
+   298→  const [bankHolderName, setBankHolderName] = useState('');
+   299→  const [passbook, setPassbook] = useState('');
+   300→  const [businessName, setBusinessName] = useState('');
+   301→  const [businessType, setBusinessType] = useState<BusinessType | ''>('');
+   302→  const [businessAddress, setBusinessAddress] = useState('');
+   303→
+   304→  const isLocked = kyc?.status === 'SUBMITTED' || kyc?.status === 'UNDER_REVIEW' || kyc?.status === 'VERIFIED';
+   305→  const canEdit = kyc?.status === 'DRAFT' || kyc?.status === 'REJECTED';
+   306→
+   307→  // Fetch KYC data
+   308→  useEffect(() => {
+   309→    const fetchKyc = async () => {
+   310→      try {
+   311→        const data = await api.getKycStatus();
+   312→        if (data.kyc) {
+   313→          const k = data.kyc as unknown as SellerKycType;
+   314→          setKyc(k);
+   315→          setAadhaarNumber(k.aadhaarNumber || '');
+   316→          setPanNumber(k.panNumber || '');
+   317→          setGstNumber(k.gstNumber || '');
+   318→          setAadhaarFront(k.aadhaarFrontUrl || '');
+   319→          setAadhaarBack(k.aadhaarBackUrl || '');
+   320→          setPanCard(k.panCardUrl || '');
+   321→          setBankAccountNo(k.bankAccountNo || '');
+   322→          setBankIfsc(k.bankIfsc || '');
+   323→          setBankName(k.bankName || '');
+   324→          setBankHolderName(k.bankHolderName || '');
+   325→          setPassbook(k.passbookUrl || '');
+   326→          setBusinessName(k.businessName || '');
+   327→          setBusinessType(k.businessType || '');
+   328→          setBusinessAddress(k.businessAddress || '');
+   329→
+   330→          // Set step based on progress
+   331→          if (k.aadhaarNumber && k.panNumber && k.aadhaarFrontUrl) setCurrentStep(1);
+   332→          if (k.bankAccountNo && k.bankIfsc) setCurrentStep(2);
+   333→        }
+   334→      } catch {
+   335→        toast.error('Failed to load KYC status');
+   336→      } finally {
+   337→        setLoading(false);
+   338→      }
+   339→    };
+   340→    fetchKyc();
+   341→  }, []);
+   342→
+   343→  // Calculate completion progress
+   344→  const getProgress = () => {
+   345→    let filled = 0;
+   346→    const total = 8;
+   347→    if (aadhaarNumber) filled++;
+   348→    if (panNumber) filled++;
+   349→    if (aadhaarFront) filled++;
+   350→    if (aadhaarBack) filled++;
+   351→    if (panCard) filled++;
+   352→    if (bankAccountNo) filled++;
+   353→    if (bankIfsc) filled++;
+   354→    if (bankHolderName) filled++;
+   355→    return Math.round((filled / total) * 100);
+   356→  };
+   357→
+   358→  const saveDraft = useCallback(async () => {
+   359→    if (!canEdit) return;
+   360→    try {
+   361→      await api.saveKycDraft({
+   362→        aadhaarNumber, panNumber, gstNumber,
+   363→        aadhaarFrontUrl: aadhaarFront, aadhaarBackUrl: aadhaarBack, panCardUrl: panCard,
+   364→        bankAccountNo, bankIfsc, bankName, bankHolderName, passbookUrl: passbook,
+   365→        businessName, businessType, businessAddress,
+   366→      });
+   367→    } catch {
+   368→      // Silent fail for draft save
+   369→    }
+   370→  }, [canEdit, aadhaarNumber, panNumber, gstNumber, aadhaarFront, aadhaarBack, panCard, bankAccountNo, bankIfsc, bankName, bankHolderName, passbook, businessName, businessType, businessAddress]);
+   371→
+   372→  const handleSubmit = async () => {
+   373→    setSubmitting(true);
+   374→    try {
+   375→      await api.submitKyc({
+   376→        aadhaarNumber, panNumber, gstNumber,
+   377→        aadhaarFrontUrl: aadhaarFront, aadhaarBackUrl: aadhaarBack, panCardUrl: panCard,
+   378→        bankAccountNo, bankIfsc, bankName, bankHolderName, passbookUrl: passbook,
+   379→        businessName, businessType: businessType || undefined, businessAddress,
+   380→      });
+   381→      toast.success('KYC documents submitted successfully!');
+   382→      // Refresh user data
+   383→      try {
+   384→        const meData = await api.me();
+   385→        setUser(meData as unknown as UserType);
+   386→      } catch {}
+   387→      // Refresh KYC
+   388→      const data = await api.getKycStatus();
+   389→      if (data.kyc) setKyc(data.kyc as unknown as SellerKycType);
+   390→    } catch (err) {
+   391→      const msg = err instanceof Error ? err.message : 'Submission failed';
+   392→      toast.error(msg);
+   393→    } finally {
+   394→      setSubmitting(false);
+   395→    }
+   396→  };
+   397→
+   398→  const formatAadhaar = (val: string) => {
+   399→    const digits = val.replace(/\D/g, '').slice(0, 12);
+   400→    return digits.replace(/(\d{4})(?=\d)/g, '$1 ');
+   401→  };
+   402→
+   403→  const formatPan = (val: string) => {
+   404→    return val.toUpperCase().slice(0, 10).replace(/[^A-Z0-9]/g, '');
+   405→  };
+   406→
+   407→  if (loading) {
+   408→    return (
+   409→      <div className="flex items-center justify-center min-h-[60vh]">
+   410→        <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+   411→      </div>
+   412→    );
+   413→  }
+   414→
+   415→  return (
+   416→    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6 pb-24 md:pb-6">
+   417→      {/* Header */}
+   418→      <div className="flex items-center gap-3 mb-4 sm:mb-6">
+   419→        <button
+   420→          onClick={() => navigate('dashboard')}
+   421→          className="w-9 h-9 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
+   422→        >
+   423→          <ArrowLeft className="w-4 h-4" />
+   424→        </button>
+   425→        <div>
+   426→          <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a]">Seller Verification</h1>
+   427→          <p className="text-xs sm:text-sm text-muted-foreground">Complete KYC to start listing items</p>
+   428→        </div>
+   429→      </div>
+   430→
+   431→      {/* Status Banner */}
+   432→      {kyc && <StatusBanner status={kyc.status} rejectionReason={kyc.rejectionReason || undefined} />}
+   433→
+   434→      {/* Progress */}
+   435→      {canEdit && (
+   436→        <div className="mt-4">
+   437→          <div className="flex items-center justify-between mb-2">
+   438→            <span className="text-xs font-medium text-muted-foreground">Completion Progress</span>
+   439→            <span className="text-xs font-bold text-emerald-600">{getProgress()}%</span>
+   440→          </div>
+   441→          <Progress value={getProgress()} className="h-2" />
+   442→        </div>
+   443→      )}
+   444→
+   445→      {/* Steps */}
+   446→      {canEdit && (
+   447→        <div className="mt-4 p-3 bg-white rounded-xl border border-gray-200">
+   448→          <StepsIndicator currentStep={currentStep} />
+   449→        </div>
+   450→      )}
+   451→
+   452→      {/* Step Content */}
+   453→      <div className="mt-4 sm:mt-6 space-y-4 sm:space-y-6">
+   454→        {/* Step 1: Identity Documents */}
+   455→        {(canEdit || isLocked) && (
+   456→          <Card className="border-gray-200">
+   457→            <CardHeader className="pb-3">
+   458→              <div className="flex items-center gap-2">
+   459→                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+   460→                  <Shield className="w-4 h-4 text-blue-600" />
+   461→                </div>
+   462→                <div>
+   463→                  <CardTitle className="text-base">Identity Documents</CardTitle>
+   464→                  <CardDescription className="text-xs">Aadhaar Card & PAN Card</CardDescription>
+   465→                </div>
+   466→              </div>
+   467→            </CardHeader>
+   468→            <CardContent className="space-y-4">
+   469→              <div className="space-y-1.5">
+   470→                <Label className="text-sm font-medium">Aadhaar Number <span className="text-red-500">*</span></Label>
+   471→                <Input
+   472→                  placeholder="XXXX XXXX XXXX"
+   473→                  value={aadhaarNumber}
+   474→                  onChange={(e) => { setAadhaarNumber(formatAadhaar(e.target.value)); if (aadhaarNumber) setCurrentStep(0); }}
+   475→                  disabled={isLocked}
+   476→                  className="h-11"
+   477→                  maxLength={14}
+   478→                />
+   479→              </div>
+   480→
+   481→              <div className="space-y-1.5">
+   482→                <Label className="text-sm font-medium">PAN Number <span className="text-red-500">*</span></Label>
+   483→                <Input
+   484→                  placeholder="ABCDE1234F"
+   485→                  value={panNumber}
+   486→                  onChange={(e) => setPanNumber(formatPan(e.target.value))}
+   487→                  disabled={isLocked}
+   488→                  className="h-11 uppercase"
+   489→                  maxLength={10}
+   490→                />
+   491→              </div>
+   492→
+   493→              <Separator />
+   494→
+   495→              <div className="space-y-3">
+   496→                <p className="text-sm font-medium text-[#0f172a]">Upload Document Photos</p>
+   497→                <DocumentUpload
+   498→                  label="Aadhaar Card (Front)"
+   499→                  description="Photo side with your name and Aadhaar number"
+   500→                  value={aadhaarFront}
+   501→                  onChange={(v) => { setAadhaarFront(v); setCurrentStep(0); }}
+   502→                  required={!isLocked}
+   503→                  disabled={isLocked}
+   504→                />
+   505→                <DocumentUpload
+   506→                  label="Aadhaar Card (Back)"
+   507→                  description="Address side of your Aadhaar card"
+   508→                  value={aadhaarBack}
+   509→                  onChange={setAadhaarBack}
+   510→                  required={!isLocked}
+   511→                  disabled={isLocked}
+   512→                />
+   513→                <DocumentUpload
+   514→                  label="PAN Card"
+   515→                  description="Clear photo of your PAN card"
+   516→                  value={panCard}
+   517→                  onChange={(v) => { setPanCard(v); setCurrentStep(0); }}
+   518→                  required={!isLocked}
+   519→                  disabled={isLocked}
+   520→                />
+   521→              </div>
+   522→            </CardContent>
+   523→          </Card>
+   524→        )}
+   525→
+   526→        {/* Step 2: Bank Details */}
+   527→        {(canEdit || isLocked) && (
+   528→          <Card className="border-gray-200">
+   529→            <CardHeader className="pb-3">
+   530→              <div className="flex items-center gap-2">
+   531→                <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+   532→                  <CreditCard className="w-4 h-4 text-emerald-600" />
+   533→                </div>
+   534→                <div>
+   535→                  <CardTitle className="text-base">Bank Account Details</CardTitle>
+   536→                  <CardDescription className="text-xs">For receiving rental payments</CardDescription>
+   537→                </div>
+   538→              </div>
+   539→            </CardHeader>
+   540→            <CardContent className="space-y-3">
+   541→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   542→                <div className="space-y-1.5">
+   543→                  <Label className="text-sm font-medium">Account Holder Name <span className="text-red-500">*</span></Label>
+   544→                  <Input
+   545→                    placeholder="Name as on bank account"
+   546→                    value={bankHolderName}
+   547→                    onChange={(e) => { setBankHolderName(e.target.value); setCurrentStep(1); }}
+   548→                    disabled={isLocked}
+   549→                    className="h-11"
+   550→                  />
+   551→                </div>
+   552→                <div className="space-y-1.5">
+   553→                  <Label className="text-sm font-medium">Bank Name</Label>
+   554→                  <Input
+   555→                    placeholder="e.g., SBI, HDFC, ICICI"
+   556→                    value={bankName}
+   557→                    onChange={(e) => setBankName(e.target.value)}
+   558→                    disabled={isLocked}
+   559→                    className="h-11"
+   560→                  />
+   561→                </div>
+   562→              </div>
+   563→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   564→                <div className="space-y-1.5">
+   565→                  <Label className="text-sm font-medium">Account Number <span className="text-red-500">*</span></Label>
+   566→                  <Input
+   567→                    placeholder="Enter account number"
+   568→                    value={bankAccountNo}
+   569→                    onChange={(e) => { setBankAccountNo(e.target.value.replace(/\D/g, '')); setCurrentStep(1); }}
+   570→                    disabled={isLocked}
+   571→                    className="h-11"
+   572→                    maxLength={18}
+   573→                  />
+   574→                </div>
+   575→                <div className="space-y-1.5">
+   576→                  <Label className="text-sm font-medium">IFSC Code <span className="text-red-500">*</span></Label>
+   577→                  <Input
+   578→                    placeholder="e.g., SBIN0001234"
+   579→                    value={bankIfsc}
+   580→                    onChange={(e) => { setBankIfsc(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '')); setCurrentStep(1); }}
+   581→                    disabled={isLocked}
+   582→                    className="h-11 uppercase"
+   583→                    maxLength={11}
+   584→                  />
+   585→                </div>
+   586→              </div>
+   587→              <Separator className="my-2" />
+   588→              <DocumentUpload
+   589→                label="Bank Passbook / Cancelled Cheque"
+   590→                description="Optional but recommended for faster verification"
+   591→                value={passbook}
+   592→                onChange={setPassbook}
+   593→                disabled={isLocked}
+   594→              />
+   595→            </CardContent>
+   596→          </Card>
+   597→        )}
+   598→
+   599→        {/* Step 3: Business Info */}
+   600→        {(canEdit || isLocked) && (
+   601→          <Card className="border-gray-200">
+   602→            <CardHeader className="pb-3">
+   603→              <div className="flex items-center gap-2">
+   604→                <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
+   605→                  <Building2 className="w-4 h-4 text-purple-600" />
+   606→                </div>
+   607→                <div>
+   608→                  <CardTitle className="text-base">Business Information</CardTitle>
+   609→                  <CardDescription className="text-xs">Optional - for business/registered sellers</CardDescription>
+   610→                </div>
+   611→              </div>
+   612→            </CardHeader>
+   613→            <CardContent className="space-y-3">
+   614→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   615→                <div className="space-y-1.5">
+   616→                  <Label className="text-sm font-medium">Business Name</Label>
+   617→                  <Input
+   618→                    placeholder="Your business name"
+   619→                    value={businessName}
+   620→                    onChange={(e) => { setBusinessName(e.target.value); setCurrentStep(2); }}
+   621→                    disabled={isLocked}
+   622→                    className="h-11"
+   623→                  />
+   624→                </div>
+   625→                <div className="space-y-1.5">
+   626→                  <Label className="text-sm font-medium">Business Type</Label>
+   627→                  <Select value={businessType} onValueChange={(v) => { setBusinessType(v as BusinessType); setCurrentStep(2); }} disabled={isLocked}>
+   628→                    <SelectTrigger className="h-11">
+   629→                      <SelectValue placeholder="Select type" />
+   630→                    </SelectTrigger>
+   631→                    <SelectContent>
+   632→                      <SelectItem value="INDIVIDUAL">Individual</SelectItem>
+   633→                      <SelectItem value="PROPRIETORSHIP">Proprietorship</SelectItem>
+   634→                      <SelectItem value="PARTNERSHIP">Partnership</SelectItem>
+   635→                      <SelectItem value="LLP">LLP</SelectItem>
+   636→                      <SelectItem value="PRIVATE_LIMITED">Private Limited</SelectItem>
+   637→                      <SelectItem value="COMPANY">Company</SelectItem>
+   638→                    </SelectContent>
+   639→                  </Select>
+   640→                </div>
+   641→              </div>
+   642→              <div className="space-y-1.5">
+   643→                <Label className="text-sm font-medium">GST Number</Label>
+   644→                <Input
+   645→                  placeholder="e.g., 22AAAAA0000A1Z5"
+   646→                  value={gstNumber}
+   647→                  onChange={(e) => setGstNumber(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+   648→                  disabled={isLocked}
+   649→                  className="h-11 uppercase"
+   650→                  maxLength={15}
+   651→                />
+   652→              </div>
+   653→              <div className="space-y-1.5">
+   654→                <Label className="text-sm font-medium">Business Address</Label>
+   655→                <Textarea
+   656→                  placeholder="Registered business address"
+   657→                  value={businessAddress}
+   658→                  onChange={(e) => { setBusinessAddress(e.target.value); setCurrentStep(2); }}
+   659→                  disabled={isLocked}
+   660→                  className="resize-none"
+   661→                  rows={2}
+   662→                />
+   663→              </div>
+   664→            </CardContent>
+   665→          </Card>
+   666→        )}
+   667→
+   668→        {/* Info Cards */}
+   669→        {canEdit && (
+   670→          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   671→            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 sm:p-4">
+   672→              <div className="flex items-start gap-2">
+   673→                <Shield className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+   674→                <div>
+   675→                  <p className="text-xs font-semibold text-blue-800">Your Data is Secure</p>
+   676→                  <p className="text-[11px] text-blue-600 mt-0.5 leading-relaxed">All documents are encrypted and stored securely. We never share your personal data.</p>
+   677→                </div>
+   678→              </div>
+   679→            </div>
+   680→            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 sm:p-4">
+   681→              <div className="flex items-start gap-2">
+   682→                <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+   683→                <div>
+   684→                  <p className="text-xs font-semibold text-amber-800">Important Notes</p>
+   685→                  <p className="text-[11px] text-amber-600 mt-0.5 leading-relaxed">Ensure document photos are clear and readable. Mismatched details will cause rejection.</p>
+   686→                </div>
+   687→              </div>
+   688→            </div>
+   689→          </div>
+   690→        )}
+   691→      </div>
+   692→
+   693→      {/* Sticky Submit Buttons */}
+   694→      {canEdit && (
+   695→        <div className="fixed bottom-16 left-0 right-0 md:bottom-0 bg-white/90 backdrop-blur-md border-t border-gray-200 p-3 sm:p-4 z-30 safe-area-bottom">
+   696→          <div className="max-w-3xl mx-auto flex items-center gap-3">
+   697→            <Button
+   698→              variant="outline"
+   699→              onClick={() => {
+   700→                saveDraft();
+   701→                toast.success('Draft saved');
+   702→                navigate('dashboard');
+   703→              }}
+   704→              className="h-11 flex-1 sm:flex-none sm:px-6"
+   705→            >
+   706→              Save Draft
+   707→            </Button>
+   708→            <Button
+   709→              onClick={handleSubmit}
+   710→              disabled={submitting}
+   711→              className="h-11 flex-[2] sm:flex-none sm:px-8 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+   712→            >
+   713→              {submitting ? (
+   714→                <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Submitting...</>
+   715→              ) : (
+   716→                <><FileCheck className="w-4 h-4 mr-2" /> Submit for Verification</>
+   717→              )}
+   718→            </Button>
+   719→          </div>
+   720→        </div>
+   721→      )}
+   722→
+   723→      {/* Verified - Go to Dashboard */}
+   724→      {kyc?.status === 'VERIFIED' && (
+   725→        <div className="fixed bottom-16 left-0 right-0 md:bottom-0 bg-white/90 backdrop-blur-md border-t border-gray-200 p-3 sm:p-4 z-30 safe-area-bottom">
+   726→          <div className="max-w-3xl mx-auto">
+   727→            <Button
+   728→              onClick={() => navigate('dashboard')}
+   729→              className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+   730→            >
+   731→              Go to Dashboard
+   732→              <ChevronRight className="w-4 h-4 ml-1" />
+   733→            </Button>
+   734→          </div>
+   735→        </div>
+   736→      )}
+   737→    </div>
+   738→  );
+   739→}
+   740→

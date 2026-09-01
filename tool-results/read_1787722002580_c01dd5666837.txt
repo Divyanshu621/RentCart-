@@ -1,0 +1,1009 @@
+     1→import { db } from '../src/lib/db'
+     2→import { hash } from 'bcryptjs'
+     3→
+     4→const now = new Date()
+     5→const daysAgo = (n: number) => new Date(now.getTime() - n * 86400000)
+     6→const daysFromNow = (n: number) => new Date(now.getTime() + n * 86400000)
+     7→
+     8→async function seed() {
+     9→  console.log('🌱 Seeding database...')
+    10→
+    11→  // ─── 1. States ───────────────────────────────────────────
+    12→  console.log('→ Creating states...')
+    13→  const statesData = [
+    14→    { name: 'Delhi', code: 'DL' },
+    15→    { name: 'Maharashtra', code: 'MH' },
+    16→    { name: 'Karnataka', code: 'KA' },
+    17→    { name: 'Tamil Nadu', code: 'TN' },
+    18→    { name: 'Gujarat', code: 'GJ' },
+    19→    { name: 'Rajasthan', code: 'RJ' },
+    20→    { name: 'Kerala', code: 'KL' },
+    21→    { name: 'West Bengal', code: 'WB' },
+    22→    { name: 'Telangana', code: 'TS' },
+    23→    { name: 'Uttar Pradesh', code: 'UP' },
+    24→  ]
+    25→  const states: Record<string, any> = {}
+    26→  for (const s of statesData) {
+    27→    states[s.code] = await db.state.create({ data: s })
+    28→  }
+    29→
+    30→  // ─── 2. Cities ───────────────────────────────────────────
+    31→  console.log('→ Creating cities...')
+    32→  const citiesData: Record<string, string[]> = {
+    33→    DL: ['New Delhi', 'Dwarka', 'Rohini'],
+    34→    MH: ['Mumbai', 'Pune', 'Nagpur'],
+    35→    KA: ['Bangalore', 'Mysore', 'Mangalore'],
+    36→    TN: ['Chennai', 'Coimbatore', 'Madurai'],
+    37→    GJ: ['Ahmedabad', 'Surat', 'Vadodara'],
+    38→    RJ: ['Jaipur', 'Udaipur', 'Jodhpur'],
+    39→    KL: ['Kochi', 'Thiruvananthapuram', 'Kozhikode'],
+    40→    WB: ['Kolkata', 'Howrah', 'Durgapur'],
+    41→    TS: ['Hyderabad', 'Warangal', 'Nizamabad'],
+    42→    UP: ['Lucknow', 'Noida', 'Agra'],
+    43→  }
+    44→  const cities: Record<string, any> = {}
+    45→  for (const [stateCode, cityNames] of Object.entries(citiesData)) {
+    46→    for (const cityName of cityNames) {
+    47→      const key = `${stateCode}-${cityName}`
+    48→      cities[key] = await db.city.create({
+    49→        data: { name: cityName, stateId: states[stateCode].id },
+    50→      })
+    51→    }
+    52→  }
+    53→
+    54→  // ─── 3. Areas ──────────────────────────────────────────
+    55→  console.log('→ Creating areas...')
+    56→  const areasData: Record<string, { name: string; pinCode?: string }[]> = {
+    57→    // Delhi
+    58→    'DL-New Delhi': [
+    59→      { name: 'Connaught Place', pinCode: '110001' },
+    60→      { name: 'Khan Market', pinCode: '110003' },
+    61→      { name: 'Sarojini Nagar', pinCode: '110023' },
+    62→      { name: 'Lajpat Nagar', pinCode: '110024' },
+    63→      { name: 'Karol Bagh', pinCode: '110005' },
+    64→      { name: 'Chandni Chowk', pinCode: '110006' },
+    65→      { name: 'Defence Colony', pinCode: '110024' },
+    66→      { name: 'Greater Kailash', pinCode: '110048' },
+    67→      { name: 'Hauz Khas', pinCode: '110016' },
+    68→      { name: 'Saket', pinCode: '110017' },
+    69→      { name: 'Mehrauli', pinCode: '110030' },
+    70→      { name: 'Vasant Kunj', pinCode: '110070' },
+    71→    ],
+    72→    'DL-Dwarka': [
+    73→      { name: 'Dwarka Sector 1', pinCode: '110075' },
+    74→      { name: 'Dwarka Sector 4', pinCode: '110075' },
+    75→      { name: 'Dwarka Sector 7', pinCode: '110075' },
+    76→      { name: 'Dwarka Sector 10', pinCode: '110075' },
+    77→      { name: 'Dwarka Sector 14', pinCode: '110078' },
+    78→      { name: 'Dwarka Sector 21', pinCode: '110077' },
+    79→      { name: 'Dwarka Sector 23', pinCode: '110077' },
+    80→      { name: 'Janakpuri', pinCode: '110058' },
+    81→      { name: 'Palam Vihar', pinCode: '110077' },
+    82→      { name: 'Uttam Nagar', pinCode: '110059' },
+    83→    ],
+    84→    'DL-Rohini': [
+    85→      { name: 'Rohini Sector 1', pinCode: '110085' },
+    86→      { name: 'Rohini Sector 3', pinCode: '110085' },
+    87→      { name: 'Rohini Sector 7', pinCode: '110085' },
+    88→      { name: 'Rohini Sector 11', pinCode: '110085' },
+    89→      { name: 'Rohini Sector 14', pinCode: '110089' },
+    90→      { name: 'Rohini Sector 16', pinCode: '110089' },
+    91→      { name: 'Rohini Sector 22', pinCode: '110086' },
+    92→      { name: 'Pitampura', pinCode: '110034' },
+    93→      { name: 'Shalimar Bagh', pinCode: '110088' },
+    94→      { name: 'Begumpur', pinCode: '110086' },
+    95→    ],
+    96→    // Maharashtra
+    97→    'MH-Mumbai': [
+    98→      { name: 'Bandra', pinCode: '400050' },
+    99→      { name: 'Andheri', pinCode: '400053' },
+   100→      { name: 'Juhu', pinCode: '400049' },
+   101→      { name: 'Powai', pinCode: '400076' },
+   102→      { name: 'Thane West', pinCode: '400601' },
+   103→      { name: 'Borivali', pinCode: '400066' },
+   104→      { name: 'Malad', pinCode: '400064' },
+   105→      { name: 'Goregaon', pinCode: '400063' },
+   106→      { name: 'Kandivali', pinCode: '400067' },
+   107→      { name: 'Dadar', pinCode: '400028' },
+   108→      { name: 'Lower Parel', pinCode: '400013' },
+   109→      { name: 'Worli', pinCode: '400030' },
+   110→    ],
+   111→    'MH-Pune': [
+   112→      { name: 'Koregaon Park', pinCode: '411001' },
+   113→      { name: 'Hinjewadi', pinCode: '411057' },
+   114→      { name: 'Baner', pinCode: '411045' },
+   115→      { name: 'Viman Nagar', pinCode: '411014' },
+   116→      { name: 'Kothrud', pinCode: '411038' },
+   117→      { name: 'Hadapsar', pinCode: '411028' },
+   118→      { name: 'Aundh', pinCode: '411007' },
+   119→      { name: 'Pimpri-Chinchwad', pinCode: '411018' },
+   120→      { name: 'Magarpatta', pinCode: '411028' },
+   121→      { name: 'Wakad', pinCode: '411057' },
+   122→    ],
+   123→    'MH-Nagpur': [
+   124→      { name: 'Dharampeth', pinCode: '440010' },
+   125→      { name: 'Civil Lines', pinCode: '440001' },
+   126→      { name: 'Sadar', pinCode: '440001' },
+   127→      { name: 'Sitabuldi', pinCode: '440012' },
+   128→      { name: 'Laxmi Nagar', pinCode: '440022' },
+   129→      { name: 'Manish Nagar', pinCode: '440023' },
+   130→      { name: 'Hingna Road', pinCode: '440016' },
+   131→      { name: 'Wardha Road', pinCode: '440015' },
+   132→      { name: 'Amravati Road', pinCode: '440026' },
+   133→      { name: 'Khamla', pinCode: '440025' },
+   134→      { name: 'Ramdaspeth', pinCode: '440010' },
+   135→    ],
+   136→    // Karnataka
+   137→    'KA-Bangalore': [
+   138→      { name: 'Koramangala', pinCode: '560034' },
+   139→      { name: 'Indiranagar', pinCode: '560038' },
+   140→      { name: 'Whitefield', pinCode: '560066' },
+   141→      { name: 'HSR Layout', pinCode: '560102' },
+   142→      { name: 'Jayanagar', pinCode: '560041' },
+   143→      { name: 'BTM Layout', pinCode: '560076' },
+   144→      { name: 'Electronic City', pinCode: '560100' },
+   145→      { name: 'Marathahalli', pinCode: '560037' },
+   146→      { name: 'Rajajinagar', pinCode: '560010' },
+   147→      { name: 'Malleshwaram', pinCode: '560003' },
+   148→      { name: 'JP Nagar', pinCode: '560078' },
+   149→      { name: 'Bannerghatta Road', pinCode: '560076' },
+   150→      { name: 'Yelahanka', pinCode: '560064' },
+   151→    ],
+   152→    'KA-Mysore': [
+   153→      { name: 'Gandhi Bazaar', pinCode: '570004' },
+   154→      { name: 'Vidyaranyapuram', pinCode: '570008' },
+   155→      { name: 'Jayalakshmipuram', pinCode: '570012' },
+   156→      { name: 'Saraswathipuram', pinCode: '570009' },
+   157→      { name: 'Kuvempu Nagar', pinCode: '570023' },
+   158→      { name: 'Hebbal Industrial Area', pinCode: '570016' },
+   159→      { name: 'Mandimohalla', pinCode: '570001' },
+   160→      { name: 'Nazarbad', pinCode: '570010' },
+   161→      { name: 'Gokulam', pinCode: '570002' },
+   162→      { name: 'Hunsur Road', pinCode: '570018' },
+   163→    ],
+   164→    'KA-Mangalore': [
+   165→      { name: 'Kadri', pinCode: '575002' },
+   166→      { name: 'Hampankatta', pinCode: '575001' },
+   167→      { name: 'Pumpwell', pinCode: '575002' },
+   168→      { name: 'Mangaladevi', pinCode: '575003' },
+   169→      { name: 'Surathkal', pinCode: '575014' },
+   170→      { name: 'Attavar', pinCode: '575001' },
+   171→      { name: 'Kankanady', pinCode: '575002' },
+   172→      { name: 'Bendoorwell', pinCode: '575008' },
+   173→      { name: 'Nandigudda', pinCode: '575004' },
+   174→      { name: 'Bejai', pinCode: '575004' },
+   175→    ],
+   176→    // Tamil Nadu
+   177→    'TN-Chennai': [
+   178→      { name: 'T. Nagar', pinCode: '600017' },
+   179→      { name: 'Anna Nagar', pinCode: '600040' },
+   180→      { name: 'Adyar', pinCode: '600020' },
+   181→      { name: 'Velachery', pinCode: '600042' },
+   182→      { name: 'Nungambakkam', pinCode: '600034' },
+   183→      { name: 'Chromepet', pinCode: '600044' },
+   184→      { name: 'Tambaram', pinCode: '600045' },
+   185→      { name: 'Porur', pinCode: '600116' },
+   186→      { name: 'OMR Thoraipakkam', pinCode: '600097' },
+   187→      { name: 'Egmore', pinCode: '600008' },
+   188→      { name: 'Mylapore', pinCode: '600004' },
+   189→      { name: 'Guindy', pinCode: '600032' },
+   190→    ],
+   191→    'TN-Coimbatore': [
+   192→      { name: 'RS Puram', pinCode: '641002' },
+   193→      { name: 'Gandhipuram', pinCode: '641012' },
+   194→      { name: 'Peelamedu', pinCode: '641004' },
+   195→      { name: 'Saibaba Colony', pinCode: '641011' },
+   196→      { name: 'Town Hall', pinCode: '641001' },
+   197→      { name: 'Vadavalli', pinCode: '641041' },
+   198→      { name: 'Saravanampatti', pinCode: '641035' },
+   199→      { name: 'Hopes College', pinCode: '641004' },
+   200→      { name: 'Singanallur', pinCode: '641005' },
+   201→      { name: 'Ramanathapuram', pinCode: '641013' },
+   202→    ],
+   203→    'TN-Madurai': [
+   204→      { name: 'Anna Nagar', pinCode: '625020' },
+   205→      { name: 'KK Nagar', pinCode: '625020' },
+   206→      { name: 'Vilakkuthoon', pinCode: '625001' },
+   207→      { name: 'Tallakulam', pinCode: '625002' },
+   208→      { name: 'Pasumalai', pinCode: '625004' },
+   209→      { name: 'Goripalayam', pinCode: '625001' },
+   210→      { name: 'K. Pudur', pinCode: '625007' },
+   211→      { name: 'S.S. Colony', pinCode: '625016' },
+   212→      { name: 'Aarapalayam', pinCode: '625001' },
+   213→      { name: 'Thirunagar', pinCode: '625006' },
+   214→      { name: 'Kalavasal', pinCode: '625016' },
+   215→    ],
+   216→    // Gujarat
+   217→    'GJ-Ahmedabad': [
+   218→      { name: 'Navrangpura', pinCode: '380009' },
+   219→      { name: 'Satellite', pinCode: '380015' },
+   220→      { name: 'Vastrapur', pinCode: '380015' },
+   221→      { name: 'Bodakdev', pinCode: '380054' },
+   222→      { name: 'Maninagar', pinCode: '380008' },
+   223→      { name: 'SG Highway', pinCode: '380054' },
+   224→      { name: 'Prahlad Nagar', pinCode: '380015' },
+   225→      { name: 'Paldi', pinCode: '380007' },
+   226→      { name: 'Memnagar', pinCode: '380052' },
+   227→      { name: 'Bopal', pinCode: '380058' },
+   228→      { name: 'Chandkheda', pinCode: '382424' },
+   229→      { name: 'Thaltej', pinCode: '380054' },
+   230→    ],
+   231→    'GJ-Surat': [
+   232→      { name: 'Adajan', pinCode: '395009' },
+   233→      { name: 'Vesu', pinCode: '395007' },
+   234→      { name: 'Piplod', pinCode: '395007' },
+   235→      { name: 'Dumas Road', pinCode: '395007' },
+   236→      { name: 'Ring Road', pinCode: '395002' },
+   237→      { name: 'Varachha', pinCode: '395006' },
+   238→      { name: 'Katargam', pinCode: '395004' },
+   239→      { name: 'Althan', pinCode: '395024' },
+   240→      { name: 'Palanpur Patiya', pinCode: '395009' },
+   241→      { name: 'Sachin GIDC', pinCode: '394230' },
+   242→    ],
+   243→    'GJ-Vadodara': [
+   244→      { name: 'Alkapuri', pinCode: '390007' },
+   245→      { name: 'Sayajigunj', pinCode: '390005' },
+   246→      { name: 'Fatehgunj', pinCode: '390002' },
+   247→      { name: 'Akota', pinCode: '390020' },
+   248→      { name: 'Gorwa', pinCode: '390016' },
+   249→      { name: 'Manjalpur', pinCode: '390011' },
+   250→      { name: 'Karelibaug', pinCode: '390018' },
+   251→      { name: 'Tandalja', pinCode: '390009' },
+   252→      { name: 'Waghodia Road', pinCode: '390019' },
+   253→      { name: 'Subhanpura', pinCode: '390021' },
+   254→      { name: 'Nizampura', pinCode: '390002' },
+   255→    ],
+   256→    // Rajasthan
+   257→    'RJ-Jaipur': [
+   258→      { name: 'C-Scheme', pinCode: '302001' },
+   259→      { name: 'Vaishali Nagar', pinCode: '302021' },
+   260→      { name: 'Malviya Nagar', pinCode: '302017' },
+   261→      { name: 'Mansarovar', pinCode: '302020' },
+   262→      { name: 'Tonk Road', pinCode: '302015' },
+   263→      { name: 'Raja Park', pinCode: '302004' },
+   264→      { name: 'Jhotwara', pinCode: '302012' },
+   265→      { name: 'Sanganer', pinCode: '302029' },
+   266→      { name: 'Bani Park', pinCode: '302016' },
+   267→      { name: 'Jagatpura', pinCode: '302017' },
+   268→      { name: 'Sodala', pinCode: '302012' },
+   269→    ],
+   270→    'RJ-Udaipur': [
+   271→      { name: 'Fatehsagar', pinCode: '313001' },
+   272→      { name: 'Sukhadia Circle', pinCode: '313001' },
+   273→      { name: 'Hathipole', pinCode: '313001' },
+   274→      { name: 'Surajpol', pinCode: '313001' },
+   275→      { name: 'Shakti Nagar', pinCode: '313001' },
+   276→      { name: 'Bhopalpura', pinCode: '313001' },
+   277→      { name: 'Ambamata', pinCode: '313001' },
+   278→      { name: 'University Road', pinCode: '313001' },
+   279→      { name: 'Nathdwara Road', pinCode: '313001' },
+   280→      { name: 'Rampura', pinCode: '313001' },
+   281→    ],
+   282→    'RJ-Jodhpur': [
+   283→      { name: 'Paota', pinCode: '342001' },
+   284→      { name: 'Sardarpura', pinCode: '342001' },
+   285→      { name: 'Shastri Nagar', pinCode: '342001' },
+   286→      { name: 'Ratanada', pinCode: '342001' },
+   287→      { name: 'Focal Point', pinCode: '342001' },
+   288→      { name: 'Chopasni Road', pinCode: '342001' },
+   289→      { name: 'Pal Road', pinCode: '342001' },
+   290→      { name: 'Basni', pinCode: '342001' },
+   291→      { name: 'Mandore', pinCode: '342001' },
+   292→      { name: 'Shiv Road', pinCode: '342001' },
+   293→      { name: 'Kabir Nagar', pinCode: '342001' },
+   294→    ],
+   295→    // Kerala
+   296→    'KL-Kochi': [
+   297→      { name: 'Edappally', pinCode: '682024' },
+   298→      { name: 'Kakkanad', pinCode: '682030' },
+   299→      { name: 'MG Road Ernakulam', pinCode: '682011' },
+   300→      { name: 'Kaloor', pinCode: '682017' },
+   301→      { name: 'Palarivattom', pinCode: '682025' },
+   302→      { name: 'Vyttila', pinCode: '682019' },
+   303→      { name: 'Tripunithura', pinCode: '682301' },
+   304→      { name: 'Fort Kochi', pinCode: '682001' },
+   305→      { name: 'Mattancherry', pinCode: '682002' },
+   306→      { name: 'Aluva', pinCode: '683101' },
+   307→    ],
+   308→    'KL-Thiruvananthapuram': [
+   309→      { name: 'Statue', pinCode: '695001' },
+   310→      { name: 'Palayam', pinCode: '695001' },
+   311→      { name: 'Kowdiar', pinCode: '695003' },
+   312→      { name: 'Vazhuthacaud', pinCode: '695014' },
+   313→      { name: 'Sasthamangalam', pinCode: '695010' },
+   314→      { name: 'Kesavadasapuram', pinCode: '695004' },
+   315→      { name: 'Pattom', pinCode: '695004' },
+   316→      { name: 'Karamana', pinCode: '695002' },
+   317→      { name: 'Neyyattinkara', pinCode: '695121' },
+   318→      { name: 'Attingal', pinCode: '695101' },
+   319→      { name: 'Kazhakkoottam', pinCode: '695582' },
+   320→    ],
+   321→    'KL-Kozhikode': [
+   322→      { name: 'SM Street', pinCode: '673001' },
+   323→      { name: 'Mavoor Road', pinCode: '673001' },
+   324→      { name: 'Nadakkavu', pinCode: '673011' },
+   325→      { name: 'Kuttichira', pinCode: '673001' },
+   326→      { name: 'Palayam', pinCode: '673001' },
+   327→      { name: 'Thondayad', pinCode: '673014' },
+   328→      { name: 'Meenchanda', pinCode: '673012' },
+   329→      { name: 'Korappath', pinCode: '673011' },
+   330→      { name: 'Ramanattukara', pinCode: '673633' },
+   331→      { name: 'Feroke', pinCode: '673631' },
+   332→    ],
+   333→    // West Bengal
+   334→    'WB-Kolkata': [
+   335→      { name: 'Salt Lake', pinCode: '700091' },
+   336→      { name: 'Park Street', pinCode: '700016' },
+   337→      { name: 'New Alipore', pinCode: '700053' },
+   338→      { name: 'Behala', pinCode: '700060' },
+   339→      { name: 'Gariahat', pinCode: '700029' },
+   340→      { name: 'Jadavpur', pinCode: '700032' },
+   341→      { name: 'Dum Dum', pinCode: '700028' },
+   342→      { name: 'Lake Town', pinCode: '700089' },
+   343→      { name: 'Tollygunge', pinCode: '700033' },
+   344→      { name: 'Ballygunge', pinCode: '700019' },
+   345→      { name: 'Mukundapur', pinCode: '700099' },
+   346→      { name: 'Rajarhat', pinCode: '700135' },
+   347→    ],
+   348→    'WB-Howrah': [
+   349→      { name: 'Howrah Station Area', pinCode: '711101' },
+   350→      { name: 'Shibpur', pinCode: '711102' },
+   351→      { name: 'Bally', pinCode: '711204' },
+   352→      { name: 'Liluah', pinCode: '711204' },
+   353→      { name: 'Andul', pinCode: '711302' },
+   354→      { name: 'Santragachi', pinCode: '711104' },
+   355→      { name: 'Domjur', pinCode: '711405' },
+   356→      { name: 'Bakultala', pinCode: '711102' },
+   357→      { name: 'Ramrajatala', pinCode: '711106' },
+   358→      { name: 'Maidan Howrah', pinCode: '711101' },
+   359→    ],
+   360→    'WB-Durgapur': [
+   361→      { name: 'City Centre', pinCode: '713216' },
+   362→      { name: 'A-Zone', pinCode: '713216' },
+   363→      { name: 'B-Zone', pinCode: '713213' },
+   364→      { name: 'C-Zone', pinCode: '713214' },
+   365→      { name: 'Durgapur Steel Township', pinCode: '713205' },
+   366→      { name: 'Benachity', pinCode: '713213' },
+   367→      { name: 'Bidhannagar', pinCode: '713212' },
+   368→      { name: 'Muchipara', pinCode: '713213' },
+   369→      { name: 'Gopalpur', pinCode: '713214' },
+   370→      { name: 'Fulia More', pinCode: '713216' },
+   371→    ],
+   372→    // Telangana
+   373→    'TS-Hyderabad': [
+   374→      { name: 'Banjara Hills', pinCode: '500034' },
+   375→      { name: 'Jubilee Hills', pinCode: '500033' },
+   376→      { name: 'HITEC City', pinCode: '500081' },
+   377→      { name: 'Gachibowli', pinCode: '500032' },
+   378→      { name: 'Madhapur', pinCode: '500081' },
+   379→      { name: 'Kondapur', pinCode: '500084' },
+   380→      { name: 'Kukatpally', pinCode: '500085' },
+   381→      { name: 'Miyapur', pinCode: '500049' },
+   382→      { name: 'Ameerpet', pinCode: '500038' },
+   383→      { name: 'Secunderabad', pinCode: '500003' },
+   384→      { name: 'Begumpet', pinCode: '500016' },
+   385→      { name: 'Tolichowki', pinCode: '500008' },
+   386→      { name: 'KPHB Colony', pinCode: '500085' },
+   387→    ],
+   388→    'TS-Warangal': [
+   389→      { name: 'Hanamkonda', pinCode: '506001' },
+   390→      { name: 'Kazipet', pinCode: '506003' },
+   391→      { name: 'Warangal Fort Area', pinCode: '506001' },
+   392→      { name: 'Naspur', pinCode: '506002' },
+   393→      { name: 'Millennium Township', pinCode: '506001' },
+   394→      { name: 'Ashok Nagar', pinCode: '506001' },
+   395→      { name: 'Subedari', pinCode: '506001' },
+   396→      { name: 'Lashkar Bazaar', pinCode: '506001' },
+   397→      { name: 'Bhadrakali', pinCode: '506001' },
+   398→      { name: 'Kakatiya Nagar', pinCode: '506001' },
+   399→    ],
+   400→    'TS-Nizamabad': [
+   401→      { name: 'Gandhi Chowk', pinCode: '503001' },
+   402→      { name: 'Mubarak Nagar', pinCode: '503001' },
+   403→      { name: 'Pragathi Nagar', pinCode: '503001' },
+   404→      { name: 'Dichpally', pinCode: '503001' },
+   405→      { name: 'Bodhan Road', pinCode: '503185' },
+   406→      { name: 'Kamareddy Road', pinCode: '503111' },
+   407→      { name: 'Malkapur Road', pinCode: '503001' },
+   408→      { name: 'Ashok Nagar', pinCode: '503001' },
+   409→      { name: 'Railway Station Road', pinCode: '503001' },
+   410→      { name: 'Armoor Road', pinCode: '503224' },
+   411→    ],
+   412→    // Uttar Pradesh
+   413→    'UP-Lucknow': [
+   414→      { name: 'Hazratganj', pinCode: '226001' },
+   415→      { name: 'Gomti Nagar', pinCode: '226010' },
+   416→      { name: 'Indira Nagar', pinCode: '226016' },
+   417→      { name: 'Aliganj', pinCode: '226024' },
+   418→      { name: 'Aminabad', pinCode: '226018' },
+   419→      { name: 'Mahanagar', pinCode: '226006' },
+   420→      { name: 'Kapoorthala', pinCode: '226024' },
+   421→      { name: 'Chinhat', pinCode: '226028' },
+   422→      { name: 'Tiwari Ganj', pinCode: '226004' },
+   423→      { name: 'Rajajipuram', pinCode: '226101' },
+   424→      { name: 'Kanpur Road', pinCode: '226022' },
+   425→      { name: 'La Martiniere Road', pinCode: '226001' },
+   426→    ],
+   427→    'UP-Noida': [
+   428→      { name: 'Sector 18', pinCode: '201301' },
+   429→      { name: 'Sector 62', pinCode: '201309' },
+   430→      { name: 'Sector 15', pinCode: '201301' },
+   431→      { name: 'Sector 50', pinCode: '201301' },
+   432→      { name: 'Sector 128', pinCode: '201304' },
+   433→      { name: 'Sector 137', pinCode: '201305' },
+   434→      { name: 'Sector 104', pinCode: '201304' },
+   435→      { name: 'Greater Noida', pinCode: '201310' },
+   436→      { name: 'Atta Market', pinCode: '201301' },
+   437→      { name: 'Sector 71', pinCode: '201307' },
+   438→    ],
+   439→    'UP-Agra': [
+   440→      { name: 'Sadar Bazaar', pinCode: '282001' },
+   441→      { name: 'Fatehabad Road', pinCode: '282001' },
+   442→      { name: 'MG Road Agra', pinCode: '282001' },
+   443→      { name: 'Sanjay Place', pinCode: '282002' },
+   444→      { name: 'Kamla Nagar', pinCode: '282004' },
+   445→      { name: 'Lohamandi', pinCode: '282001' },
+   446→      { name: 'Balkeshwar', pinCode: '282004' },
+   447→      { name: 'Sikandra', pinCode: '282007' },
+   448→      { name: 'Dayalbagh', pinCode: '282005' },
+   449→      { name: 'Idgah Colony', pinCode: '282001' },
+   450→      { name: 'Shahganj', pinCode: '282010' },
+   451→    ],
+   452→  }
+   453→  const allAreas: { name: string; cityId: string; pinCode?: string }[] = []
+   454→  for (const [cityKey, areaList] of Object.entries(areasData)) {
+   455→    for (const area of areaList) {
+   456→      allAreas.push({ name: area.name, cityId: cities[cityKey].id, pinCode: area.pinCode })
+   457→    }
+   458→  }
+   459→  await db.area.createMany({ data: allAreas })
+   460→  console.log(`  Created ${allAreas.length} areas across ${Object.keys(areasData).length} cities`)
+   461→
+   462→  // ─── 4. Categories ────────────────────────────────────────
+   463→  console.log('→ Creating categories...')
+   464→  const categoriesData = [
+   465→    { name: 'Electronics', slug: 'electronics', icon: 'cpu', description: 'Electronic devices and gadgets' },
+   466→    { name: 'Cameras', slug: 'cameras', icon: 'camera', description: 'Photography and videography equipment' },
+   467→    { name: 'Laptops', slug: 'laptops', icon: 'laptop', description: 'Laptops and notebooks' },
+   468→    { name: 'Gaming', slug: 'gaming', icon: 'gamepad-2', description: 'Gaming consoles and accessories' },
+   469→    { name: 'Furniture', slug: 'furniture', icon: 'armchair', description: 'Home and office furniture' },
+   470→    { name: 'Tools', slug: 'tools', icon: 'wrench', description: 'Power tools and hand tools' },
+   471→    { name: 'Vehicles', slug: 'vehicles', icon: 'car', description: 'Vehicles for rent' },
+   472→    { name: 'Bikes', slug: 'bikes', icon: 'bike', description: 'Bicycles and motorbikes' },
+   473→    { name: 'Sports', slug: 'sports', icon: 'dumbbell', description: 'Sports and fitness equipment' },
+   474→    { name: 'Camping', slug: 'camping', icon: 'tent', description: 'Camping and outdoor gear' },
+   475→    { name: 'Party Equipment', slug: 'party-equipment', icon: 'music', description: 'Party and event equipment' },
+   476→    { name: 'Home Appliances', slug: 'home-appliances', icon: 'home', description: 'Home appliances' },
+   477→    { name: 'Books', slug: 'books', icon: 'book-open', description: 'Books and reading material' },
+   478→    { name: 'Fashion', slug: 'fashion', icon: 'shirt', description: 'Fashion and accessories' },
+   479→    { name: 'Musical Instruments', slug: 'musical-instruments', icon: 'guitar', description: 'Musical instruments and audio gear' },
+   480→  ]
+   481→  const categories: Record<string, any> = {}
+   482→  for (const c of categoriesData) {
+   483→    categories[c.slug] = await db.category.create({ data: c })
+   484→  }
+   485→
+   486→  // ─── 4. Users ─────────────────────────────────────────────
+   487→  console.log('→ Creating users...')
+   488→  const passwordHash = await hash('password123', 10)
+   489→
+   490→  const usersData = [
+   491→    { name: 'Admin User', email: 'admin@rentloop.com', phone: '9876543210', role: 'SUPER_ADMIN', stateCode: 'DL', cityKey: 'DL-New Delhi' },
+   492→    { name: 'Admin Two', email: 'admin2@rentloop.com', phone: '9876543211', role: 'ADMIN', stateCode: 'MH', cityKey: 'MH-Mumbai' },
+   493→    { name: 'Rahul Sharma', email: 'owner1@rentloop.com', phone: '9876543212', role: 'OWNER', stateCode: 'DL', cityKey: 'DL-New Delhi' },
+   494→    { name: 'Priya Patel', email: 'owner2@rentloop.com', phone: '9876543213', role: 'OWNER', stateCode: 'MH', cityKey: 'MH-Pune' },
+   495→    { name: 'Vikram Reddy', email: 'owner3@rentloop.com', phone: '9876543214', role: 'OWNER', stateCode: 'KA', cityKey: 'KA-Bangalore' },
+   496→    { name: 'Amit Kumar', email: 'customer1@rentloop.com', phone: '9876543215', role: 'CUSTOMER', stateCode: 'DL', cityKey: 'DL-New Delhi' },
+   497→    { name: 'Sneha Iyer', email: 'customer2@rentloop.com', phone: '9876543216', role: 'CUSTOMER', stateCode: 'MH', cityKey: 'MH-Mumbai' },
+   498→    { name: 'Rohan Das', email: 'customer3@rentloop.com', phone: '9876543217', role: 'CUSTOMER', stateCode: 'KA', cityKey: 'KA-Bangalore' },
+   499→    { name: 'Meera Nair', email: 'customer4@rentloop.com', phone: '9876543218', role: 'CUSTOMER', stateCode: 'TN', cityKey: 'TN-Chennai' },
+   500→    { name: 'Arjun Singh', email: 'customer5@rentloop.com', phone: '9876543219', role: 'CUSTOMER', stateCode: 'RJ', cityKey: 'RJ-Jaipur' },
+   501→  ]
+   502→  const users: any[] = []
+   503→  for (const u of usersData) {
+   504→    const user = await db.user.create({
+   505→      data: {
+   506→        name: u.name,
+   507→        email: u.email,
+   508→        phone: u.phone,
+   509→        passwordHash,
+   510→        role: u.role,
+   511→        stateId: states[u.stateCode].id,
+   512→        cityId: cities[u.cityKey].id,
+   513→        isVerified: true,
+   514→        isActive: true,
+   515→      },
+   516→    })
+   517→    users.push(user)
+   518→  }
+   519→
+   520→  // Shorthand references
+   521→  const admin = users[0]
+   522→  const admin2 = users[1]
+   523→  const owner1 = users[2] // Rahul - Delhi
+   524→  const owner2 = users[3] // Priya - Maharashtra
+   525→  const owner3 = users[4] // Vikram - Karnataka
+   526→  const cust1 = users[5]  // Amit - Delhi
+   527→  const cust2 = users[6]  // Sneha - Maharashtra
+   528→  const cust3 = users[7]  // Rohan - Karnataka
+   529→  const cust4 = users[8]  // Meera - Tamil Nadu
+   530→  const cust5 = users[9]  // Arjun - Rajasthan
+   531→
+   532→  // ─── 5. Products ──────────────────────────────────────────
+   533→  console.log('→ Creating products...')
+   534→  const productsData = [
+   535→    {
+   536→      title: 'Canon EOS R10 Camera', slug: 'canon-eos-r10',
+   537→      description: 'Canon EOS R10 mirrorless camera with 18-45mm lens kit. Perfect for photography enthusiasts and content creators. 24.2MP APS-C sensor with fast autofocus.',
+   538→      categorySlug: 'cameras', condition: 'LIKE_NEW', dailyPrice: 800, securityDeposit: 15000,
+   539→      owner: owner1, stateCode: 'DL', cityKey: 'DL-New Delhi', brand: 'Canon', model: 'EOS R10', purchaseYear: 2023,
+   540→    },
+   541→    {
+   542→      title: 'Sony PlayStation 5', slug: 'sony-playstation-5',
+   543→      description: 'PS5 console with DualSense controller and 2 games included. Next-gen gaming experience with 4K support and ultra-fast SSD.',
+   544→      categorySlug: 'gaming', condition: 'GOOD', dailyPrice: 500, securityDeposit: 20000,
+   545→      owner: owner2, stateCode: 'MH', cityKey: 'MH-Mumbai', brand: 'Sony', model: 'PS5', purchaseYear: 2022,
+   546→    },
+   547→    {
+   548→      title: 'MacBook Pro M3', slug: 'macbook-pro-m3',
+   549→      description: 'Apple MacBook Pro 14-inch with M3 chip, 16GB RAM, 512GB SSD. Ideal for video editing, coding, and creative work.',
+   550→      categorySlug: 'laptops', condition: 'LIKE_NEW', dailyPrice: 1500, securityDeposit: 50000,
+   551→      owner: owner3, stateCode: 'KA', cityKey: 'KA-Bangalore', brand: 'Apple', model: 'MacBook Pro M3', purchaseYear: 2024,
+   552→    },
+   553→    {
+   554→      title: 'Mountain Bike', slug: 'mountain-bike',
+   555→      description: 'Premium mountain bike with 21-speed gear system, front suspension, and durable alloy frame. Great for trails and city rides.',
+   556→      categorySlug: 'bikes', condition: 'GOOD', dailyPrice: 300, securityDeposit: 5000,
+   557→      owner: owner1, stateCode: 'DL', cityKey: 'DL-Dwarka', brand: 'Hero', model: 'Xtreme', purchaseYear: 2023,
+   558→    },
+   559→    {
+   560→      title: 'Camping Tent Set', slug: 'camping-tent-set',
+   561→      description: '4-person waterproof camping tent with accessories including sleeping bags, ground mat, and LED lantern. Perfect for outdoor adventures.',
+   562→      categorySlug: 'camping', condition: 'NEW', dailyPrice: 400, securityDeposit: 3000,
+   563→      owner: owner1, stateCode: 'RJ', cityKey: 'RJ-Jaipur', brand: 'Decathlon', model: '2 Seconds Easy', purchaseYear: 2024,
+   564→    },
+   565→    {
+   566→      title: 'DJI Drone', slug: 'dji-drone',
+   567→      description: 'DJI Mavic Air 2 drone with 4K camera, 3-axis gimbal, and 34-min flight time. Includes extra batteries and carrying case.',
+   568→      categorySlug: 'cameras', condition: 'LIKE_NEW', dailyPrice: 2000, securityDeposit: 30000,
+   569→      owner: owner3, stateCode: 'KA', cityKey: 'KA-Bangalore', brand: 'DJI', model: 'Mavic Air 2', purchaseYear: 2023,
+   570→    },
+   571→    {
+   572→      title: 'Projector Epson', slug: 'projector-epson',
+   573→      description: 'Epson EB-X51 projector with 3LCD technology, 3600 lumens, and HD resolution. Great for movies, presentations, and events.',
+   574→      categorySlug: 'electronics', condition: 'GOOD', dailyPrice: 600, securityDeposit: 10000,
+   575→      owner: owner3, stateCode: 'TN', cityKey: 'TN-Chennai', brand: 'Epson', model: 'EB-X51', purchaseYear: 2022,
+   576→    },
+   577→    {
+   578→      title: 'Power Drill Set', slug: 'power-drill-set',
+   579→      description: 'Bosch professional power drill set with 50 accessories including drill bits, screwdriver bits, and carrying case. Cordless with 2 batteries.',
+   580→      categorySlug: 'tools', condition: 'GOOD', dailyPrice: 250, securityDeposit: 3000,
+   581→      owner: owner1, stateCode: 'DL', cityKey: 'DL-Rohini', brand: 'Bosch', model: 'GSB 18V-28', purchaseYear: 2023,
+   582→    },
+   583→    {
+   584→      title: 'Electric Guitar', slug: 'electric-guitar',
+   585→      description: 'Fender Squier Stratocaster electric guitar with amplifier and accessories. Perfect for beginners and intermediate players.',
+   586→      categorySlug: 'musical-instruments', condition: 'LIKE_NEW', dailyPrice: 350, securityDeposit: 5000,
+   587→      owner: owner2, stateCode: 'MH', cityKey: 'MH-Mumbai', brand: 'Fender', model: 'Squier Strat', purchaseYear: 2023,
+   588→    },
+   589→    {
+   590→      title: 'DSLR Nikon D850', slug: 'dslr-nikon-d850',
+   591→      description: 'Nikon D850 full-frame DSLR with 45.7MP sensor and 24-70mm f/2.8 lens. Professional-grade camera for weddings and events.',
+   592→      categorySlug: 'cameras', condition: 'GOOD', dailyPrice: 1500, securityDeposit: 40000,
+   593→      owner: owner1, stateCode: 'DL', cityKey: 'DL-New Delhi', brand: 'Nikon', model: 'D850', purchaseYear: 2021,
+   594→    },
+   595→    {
+   596→      title: 'Gaming Laptop ASUS ROG', slug: 'gaming-laptop-asus-rog',
+   597→      description: 'ASUS ROG Strix G16 gaming laptop with RTX 4060, Intel i7-13650HX, 16GB RAM. Ultimate gaming and streaming machine.',
+   598→      categorySlug: 'laptops', condition: 'LIKE_NEW', dailyPrice: 1200, securityDeposit: 35000,
+   599→      owner: owner3, stateCode: 'KA', cityKey: 'KA-Bangalore', brand: 'ASUS', model: 'ROG Strix G16', purchaseYear: 2024,
+   600→    },
+   601→    {
+   602→      title: 'Office Chair', slug: 'office-chair',
+   603→      description: 'Ergonomic office chair with lumbar support, adjustable armrests, and breathable mesh back. Ideal for long working hours.',
+   604→      categorySlug: 'furniture', condition: 'GOOD', dailyPrice: 100, securityDeposit: 2000,
+   605→      owner: owner2, stateCode: 'MH', cityKey: 'MH-Pune', brand: 'Featherlite', model: 'Ergo Pro', purchaseYear: 2022,
+   606→    },
+   607→    {
+   608→      title: 'Camping Stove', slug: 'camping-stove',
+   609→      description: 'Portable gas camping stove with 2 burners, auto-ignition, and wind shield. Comes with gas cylinder and carry bag.',
+   610→      categorySlug: 'camping', condition: 'NEW', dailyPrice: 150, securityDeposit: 1000,
+   611→      owner: owner2, stateCode: 'RJ', cityKey: 'RJ-Udaipur', brand: 'Coleman', model: ' Triton Series', purchaseYear: 2024,
+   612→    },
+   613→    {
+   614→      title: 'Bicycle', slug: 'bicycle',
+   615→      description: 'Hybrid city bicycle with 7-speed gears, comfortable saddle, and front basket. Perfect for daily commute and leisure rides.',
+   616→      categorySlug: 'bikes', condition: 'GOOD', dailyPrice: 100, securityDeposit: 2000,
+   617→      owner: owner1, stateCode: 'DL', cityKey: 'DL-Dwarka', brand: 'Hercules', model: 'Roadeo', purchaseYear: 2023,
+   618→    },
+   619→    {
+   620→      title: 'GoPro Hero 12', slug: 'gopro-hero-12',
+   621→      description: 'GoPro Hero 12 Black action camera with 5.3K video, HyperSmooth 6.0 stabilization, and waterproof design. Includes mounts and accessories.',
+   622→      categorySlug: 'cameras', condition: 'LIKE_NEW', dailyPrice: 500, securityDeposit: 8000,
+   623→      owner: owner3, stateCode: 'KA', cityKey: 'KA-Mysore', brand: 'GoPro', model: 'Hero 12 Black', purchaseYear: 2024,
+   624→    },
+   625→    {
+   626→      title: 'Bluetooth Speaker JBL', slug: 'bluetooth-speaker-jbl',
+   627→      description: 'JBL PartyBox 310 portable Bluetooth speaker with powerful bass, light effects, and 18-hour battery life. Great for parties and outdoor events.',
+   628→      categorySlug: 'electronics', condition: 'GOOD', dailyPrice: 400, securityDeposit: 4000,
+   629→      owner: owner2, stateCode: 'TN', cityKey: 'TN-Coimbatore', brand: 'JBL', model: 'PartyBox 310', purchaseYear: 2023,
+   630→    },
+   631→    {
+   632→      title: 'Treadmill', slug: 'treadmill',
+   633→      description: 'Motorized treadmill with 3HP motor, incline up to 15%, speed up to 14km/h. Foldable design with heart rate monitor and built-in speakers.',
+   634→      categorySlug: 'sports', condition: 'GOOD', dailyPrice: 300, securityDeposit: 5000,
+   635→      owner: owner2, stateCode: 'MH', cityKey: 'MH-Mumbai', brand: 'PowerMax', model: 'TDA-250', purchaseYear: 2023,
+   636→    },
+   637→    {
+   638→      title: 'Telescope', slug: 'telescope',
+   639→      description: 'Celestron AstroMaster 130EQ telescope with equatorial mount. Perfect for stargazing and celestial observation. Includes 2 eyepieces.',
+   640→      categorySlug: 'electronics', condition: 'LIKE_NEW', dailyPrice: 350, securityDeposit: 6000,
+   641→      owner: owner1, stateCode: 'DL', cityKey: 'DL-New Delhi', brand: 'Celestron', model: 'AstroMaster 130EQ', purchaseYear: 2023,
+   642→    },
+   643→    {
+   644→      title: 'VR Headset Meta Quest', slug: 'vr-headset-meta-quest',
+   645→      description: 'Meta Quest 3 VR headset with 128GB storage, mixed reality passthrough, and Touch Plus controllers. Includes carrying case.',
+   646→      categorySlug: 'electronics', condition: 'NEW', dailyPrice: 450, securityDeposit: 15000,
+   647→      owner: owner3, stateCode: 'KA', cityKey: 'KA-Bangalore', brand: 'Meta', model: 'Quest 3', purchaseYear: 2024,
+   648→    },
+   649→    {
+   650→      title: 'Folding Table', slug: 'folding-table',
+   651→      description: '6-foot folding table, heavy-duty steel frame with waterproof top. Ideal for events, exhibitions, and temporary setups.',
+   652→      categorySlug: 'furniture', condition: 'GOOD', dailyPrice: 80, securityDeposit: 1000,
+   653→      owner: owner2, stateCode: 'MH', cityKey: 'MH-Nagpur', brand: 'National', model: '6ft Folding', purchaseYear: 2022,
+   654→    },
+   655→    {
+   656→      title: 'Ring Light', slug: 'ring-light',
+   657→      description: '18-inch ring light with tripod stand, phone holder, and remote control. Adjustable color temperature and brightness. Perfect for content creators.',
+   658→      categorySlug: 'electronics', condition: 'NEW', dailyPrice: 150, securityDeposit: 2000,
+   659→      owner: owner1, stateCode: 'TN', cityKey: 'TN-Chennai', brand: 'Godox', model: 'LR180C', purchaseYear: 2024,
+   660→    },
+   661→    {
+   662→      title: 'Kayak', slug: 'kayak',
+   663→      description: 'Inflatable 2-person kayak with paddles, pump, and repair kit. Durable PVC construction suitable for lakes and calm rivers.',
+   664→      categorySlug: 'sports', condition: 'GOOD', dailyPrice: 500, securityDeposit: 5000,
+   665→      owner: owner2, stateCode: 'KL', cityKey: 'KL-Kochi', brand: 'Intex', model: 'Explorer K2', purchaseYear: 2023,
+   666→    },
+   667→    {
+   668→      title: 'Badminton Set', slug: 'badminton-set',
+   669→      description: 'Professional badminton set with 4 rackets, 12 shuttlecocks, net with posts, and carrying bag. Tournament-grade quality.',
+   670→      categorySlug: 'sports', condition: 'NEW', dailyPrice: 200, securityDeposit: 1500,
+   671→      owner: owner1, stateCode: 'DL', cityKey: 'DL-Rohini', brand: 'Yonex', model: 'Astrox Pro Set', purchaseYear: 2024,
+   672→    },
+   673→    {
+   674→      title: 'Party Speaker', slug: 'party-speaker',
+   675→      description: 'JBL Boombox 3 portable party speaker with IP67 waterproof rating, 24-hour battery, and powerful JBL Pro Sound.',
+   676→      categorySlug: 'party-equipment', condition: 'LIKE_NEW', dailyPrice: 350, securityDeposit: 5000,
+   677→      owner: owner2, stateCode: 'MH', cityKey: 'MH-Mumbai', brand: 'JBL', model: 'Boombox 3', purchaseYear: 2024,
+   678→    },
+   679→    {
+   680→      title: 'Welding Machine', slug: 'welding-machine',
+   681→      description: 'ARC welding machine 200A with accessories including electrodes, helmet, gloves, and chipping hammer. Industrial grade.',
+   682→      categorySlug: 'tools', condition: 'GOOD', dailyPrice: 400, securityDeposit: 5000,
+   683→      owner: owner3, stateCode: 'GJ', cityKey: 'GJ-Ahmedabad', brand: 'Bosch', model: 'GWS 200', purchaseYear: 2022,
+   684→    },
+   685→    {
+   686→      title: 'Sewing Machine', slug: 'sewing-machine',
+   687→      description: 'Brother computerized sewing machine with 80 built-in stitches, LCD display, and extension table. Great for tailoring and crafts.',
+   688→      categorySlug: 'home-appliances', condition: 'GOOD', dailyPrice: 150, securityDeposit: 3000,
+   689→      owner: owner1, stateCode: 'WB', cityKey: 'WB-Kolkata', brand: 'Brother', model: 'CS8080', purchaseYear: 2023,
+   690→    },
+   691→    {
+   692→      title: 'Piano Keyboard', slug: 'piano-keyboard',
+   693→      description: 'Yamaha PSR-E373 61-key portable keyboard with 622 voices, 165 styles, and education suite. Includes stand and power adapter.',
+   694→      categorySlug: 'musical-instruments', condition: 'LIKE_NEW', dailyPrice: 300, securityDeposit: 5000,
+   695→      owner: owner3, stateCode: 'TS', cityKey: 'TS-Hyderabad', brand: 'Yamaha', model: 'PSR-E373', purchaseYear: 2023,
+   696→    },
+   697→    {
+   698→      title: 'Drone Mini', slug: 'drone-mini',
+   699→      description: 'DJI Mini 3 Fly More Combo with 4K/60fps camera, 38-min flight time, and GPS return-to-home. Ultra-lightweight under 249g.',
+   700→      categorySlug: 'cameras', condition: 'NEW', dailyPrice: 1000, securityDeposit: 15000,
+   701→      owner: owner1, stateCode: 'UP', cityKey: 'UP-Lucknow', brand: 'DJI', model: 'Mini 3', purchaseYear: 2024,
+   702→    },
+   703→    {
+   704→      title: 'Surfboard', slug: 'surfboard',
+   705→      description: '8-foot foam surfboard, beginner-friendly with soft deck and tri-fin setup. Includes leash and board bag.',
+   706→      categorySlug: 'sports', condition: 'GOOD', dailyPrice: 400, securityDeposit: 3000,
+   707→      owner: owner2, stateCode: 'KL', cityKey: 'KL-Kozhikode', brand: 'Wavestorm', model: '8ft Classic', purchaseYear: 2023,
+   708→    },
+   709→    {
+   710→      title: 'Film Camera', slug: 'film-camera',
+   711→      description: 'Canon AE-1 35mm film SLR camera with 50mm f/1.8 lens. Classic analog camera for film photography enthusiasts. Includes camera bag.',
+   712→      categorySlug: 'cameras', condition: 'GOOD', dailyPrice: 200, securityDeposit: 5000,
+   713→      owner: owner3, stateCode: 'TN', cityKey: 'TN-Madurai', brand: 'Canon', model: 'AE-1', purchaseYear: 1980,
+   714→    },
+   715→  ]
+   716→
+   717→  const products: any[] = []
+   718→  for (const p of productsData) {
+   719→    const product = await db.product.create({
+   720→      data: {
+   721→        ownerId: p.owner.id,
+   722→        categoryId: categories[p.categorySlug].id,
+   723→        title: p.title,
+   724→        slug: p.slug,
+   725→        description: p.description,
+   726→        condition: p.condition,
+   727→        brand: p.brand,
+   728→        model: p.model,
+   729→        purchaseYear: p.purchaseYear,
+   730→        dailyPrice: p.dailyPrice,
+   731→        securityDeposit: p.securityDeposit,
+   732→        minRentalDays: 1,
+   733→        maxRentalDays: 30,
+   734→        stateId: states[p.stateCode].id,
+   735→        cityId: cities[p.cityKey].id,
+   736→        status: 'APPROVED',
+   737→      },
+   738→    })
+   739→    products.push(product)
+   740→  }
+   741→
+   742→  // ─── 6. Rentals ───────────────────────────────────────────
+   743→  console.log('→ Creating rentals...')
+   744→
+   745→  const rentals: any[] = []
+   746→
+   747→  // Helper to create rental
+   748→  async function createRental(data: {
+   749→    customer: any, owner: any, product: any,
+   750→    startDate: Date, endDate: Date,
+   751→    status: string, actualReturnDate?: Date,
+   752→    cancellationReason?: string,
+   753→  }) {
+   754→    const rentalDays = Math.ceil((data.endDate.getTime() - data.startDate.getTime()) / 86400000)
+   755→    const dailyRate = data.product.dailyPrice
+   756→    const rentalAmount = rentalDays * dailyRate
+   757→    const securityDeposit = data.product.securityDeposit
+   758→    const platformFee = Math.round(rentalAmount * 0.1 * 100) / 100
+   759→    const tax = Math.round(rentalAmount * 0.18 * 100) / 100
+   760→    const totalAmount = rentalAmount + platformFee + tax + securityDeposit
+   761→
+   762→    const rental = await db.rental.create({
+   763→      data: {
+   764→        customerId: data.customer.id,
+   765→        ownerId: data.owner.id,
+   766→        productId: data.product.id,
+   767→        startDate: data.startDate,
+   768→        endDate: data.endDate,
+   769→        actualReturnDate: data.actualReturnDate ?? null,
+   770→        rentalDays,
+   771→        dailyRate,
+   772→        rentalAmount,
+   773→        securityDeposit,
+   774→        platformFee,
+   775→        tax,
+   776→        totalAmount,
+   777→        status: data.status,
+   778→        cancellationReason: data.cancellationReason ?? null,
+   779→      },
+   780→    })
+   781→    rentals.push(rental)
+   782→    return rental
+   783→  }
+   784→
+   785→  // 3 ACTIVE rentals
+   786→  await createRental({
+   787→    customer: cust1, owner: owner1, product: products[0], // Canon EOS R10
+   788→    startDate: daysAgo(3), endDate: daysFromNow(4), status: 'ACTIVE',
+   789→  })
+   790→  await createRental({
+   791→    customer: cust2, owner: owner2, product: products[1], // PS5
+   792→    startDate: daysAgo(2), endDate: daysFromNow(5), status: 'ACTIVE',
+   793→  })
+   794→  await createRental({
+   795→    customer: cust3, owner: owner3, product: products[2], // MacBook Pro
+   796→    startDate: daysAgo(1), endDate: daysFromNow(6), status: 'ACTIVE',
+   797→  })
+   798→
+   799→  // 4 COMPLETED rentals
+   800→  const completedR1 = await createRental({
+   801→    customer: cust4, owner: owner1, product: products[3], // Mountain Bike
+   802→    startDate: daysAgo(20), endDate: daysAgo(15), status: 'COMPLETED', actualReturnDate: daysAgo(15),
+   803→  })
+   804→  const completedR2 = await createRental({
+   805→    customer: cust5, owner: owner2, product: products[4], // Camping Tent
+   806→    startDate: daysAgo(30), endDate: daysAgo(25), status: 'COMPLETED', actualReturnDate: daysAgo(25),
+   807→  })
+   808→  const completedR3 = await createRental({
+   809→    customer: cust1, owner: owner3, product: products[5], // DJI Drone
+   810→    startDate: daysAgo(25), endDate: daysAgo(20), status: 'COMPLETED', actualReturnDate: daysAgo(20),
+   811→  })
+   812→  const completedR4 = await createRental({
+   813→    customer: cust2, owner: owner1, product: products[7], // Power Drill
+   814→    startDate: daysAgo(15), endDate: daysAgo(12), status: 'COMPLETED', actualReturnDate: daysAgo(12),
+   815→  })
+   816→
+   817→  // 2 OWNER_PENDING
+   818→  await createRental({
+   819→    customer: cust3, owner: owner2, product: products[8], // Electric Guitar
+   820→    startDate: daysFromNow(2), endDate: daysFromNow(5), status: 'OWNER_PENDING',
+   821→  })
+   822→  await createRental({
+   823→    customer: cust4, owner: owner1, product: products[17], // Telescope
+   824→    startDate: daysFromNow(3), endDate: daysFromNow(7), status: 'OWNER_PENDING',
+   825→  })
+   826→
+   827→  // 2 OWNER_ACCEPTED
+   828→  await createRental({
+   829→    customer: cust5, owner: owner3, product: products[19], // VR Headset
+   830→    startDate: daysFromNow(1), endDate: daysFromNow(4), status: 'OWNER_ACCEPTED',
+   831→  })
+   832→  await createRental({
+   833→    customer: cust1, owner: owner2, product: products[14], // GoPro
+   834→    startDate: daysFromNow(2), endDate: daysFromNow(5), status: 'OWNER_ACCEPTED',
+   835→  })
+   836→
+   837→  // 2 RETURN_PENDING
+   838→  await createRental({
+   839→    customer: cust2, owner: owner1, product: products[9], // DSLR Nikon
+   840→    startDate: daysAgo(5), endDate: daysAgo(1), status: 'RETURN_PENDING',
+   841→  })
+   842→  await createRental({
+   843→    customer: cust3, owner: owner3, product: products[11], // Gaming Laptop
+   844→    startDate: daysAgo(7), endDate: daysAgo(1), status: 'RETURN_PENDING',
+   845→  })
+   846→
+   847→  // 2 OVERDUE
+   848→  await createRental({
+   849→    customer: cust4, owner: owner1, product: products[13], // Bicycle
+   850→    startDate: daysAgo(12), endDate: daysAgo(2), status: 'OVERDUE',
+   851→  })
+   852→  await createRental({
+   853→    customer: cust5, owner: owner2, product: products[15], // JBL Speaker
+   854→    startDate: daysAgo(10), endDate: daysAgo(3), status: 'OVERDUE',
+   855→  })
+   856→
+   857→  // 2 CANCELLED
+   858→  await createRental({
+   859→    customer: cust1, owner: owner2, product: products[20], // Folding Table
+   860→    startDate: daysFromNow(5), endDate: daysFromNow(8), status: 'CANCELLED',
+   861→    cancellationReason: 'Customer changed plans',
+   862→  })
+   863→  await createRental({
+   864→    customer: cust3, owner: owner1, product: products[22], // Badminton Set
+   865→    startDate: daysFromNow(3), endDate: daysFromNow(6), status: 'CANCELLED',
+   866→    cancellationReason: 'Product unavailable on selected dates',
+   867→  })
+   868→
+   869→  // 3 PENDING_PAYMENT
+   870→  await createRental({
+   871→    customer: cust4, owner: owner3, product: products[24], // Welding Machine
+   872→    startDate: daysFromNow(2), endDate: daysFromNow(5), status: 'PENDING_PAYMENT',
+   873→  })
+   874→  await createRental({
+   875→    customer: cust5, owner: owner1, product: products[25], // Sewing Machine
+   876→    startDate: daysFromNow(1), endDate: daysFromNow(4), status: 'PENDING_PAYMENT',
+   877→  })
+   878→  await createRental({
+   879→    customer: cust1, owner: owner3, product: products[26], // Piano Keyboard
+   880→    startDate: daysFromNow(3), endDate: daysFromNow(7), status: 'PENDING_PAYMENT',
+   881→  })
+   882→
+   883→  // ─── 7. Reviews (for completed rentals) ───────────────────
+   884→  console.log('→ Creating reviews...')
+   885→  const reviewsData = [
+   886→    { rental: completedR1, reviewer: cust4, target: owner1, product: products[3], rating: 5, comment: 'Excellent mountain bike! Well maintained and great condition. Owner was very helpful with pickup and return.' },
+   887→    { rental: completedR2, reviewer: cust5, target: owner2, product: products[4], rating: 4, comment: 'Camping tent was in great condition. All accessories were included as described. Would rent again.' },
+   888→    { rental: completedR3, reviewer: cust1, target: owner3, product: products[5], rating: 5, comment: 'DJI drone was amazing! Captured some incredible footage. Owner provided a quick tutorial which was very helpful.' },
+   889→    { rental: completedR4, reviewer: cust2, target: owner1, product: products[7], rating: 4, comment: 'Power drill set was very useful for my home renovation project. All bits and accessories were included.' },
+   890→    { rental: completedR1, reviewer: owner1, target: cust4, product: products[3], rating: 5, comment: 'Great customer! Returned the bike on time and in excellent condition.' },
+   891→    { rental: completedR2, reviewer: owner2, target: cust5, product: products[4], rating: 4, comment: 'Good customer. Tent was returned clean and well-packed.' },
+   892→    { rental: completedR3, reviewer: owner3, target: cust1, product: products[5], rating: 5, comment: 'Very responsible renter. Drone returned in perfect condition with all accessories.' },
+   893→    { rental: completedR4, reviewer: owner1, target: cust2, product: products[7], rating: 4, comment: 'Polite and punctual customer. Would rent to again.' },
+   894→    { rental: completedR1, reviewer: cust4, target: owner1, product: products[3], rating: 4, comment: 'Smooth rental experience. The bike was perfect for my weekend trip to Aravalli hills.' },
+   895→    { rental: completedR2, reviewer: cust5, target: owner2, product: products[4], rating: 3, comment: 'Decent experience. Tent was good but delivery was slightly delayed.' },
+   896→    { rental: completedR3, reviewer: cust1, target: owner3, product: products[5], rating: 5, comment: 'Absolutely fantastic drone rental. The owner was super professional and responsive.' },
+   897→    { rental: completedR4, reviewer: cust2, target: owner1, product: products[7], rating: 3, comment: 'Drill set worked well. Minor issue with one battery not holding charge fully.' },
+   898→    { rental: completedR1, reviewer: cust4, target: owner1, product: products[3], rating: 5, comment: 'Best rental experience on RentCart so far! Highly recommend this owner.' },
+   899→    { rental: completedR2, reviewer: cust5, target: owner2, product: products[4], rating: 4, comment: 'Great value for money. The tent set had everything we needed for our camping trip.' },
+   900→    { rental: completedR3, reviewer: cust1, target: owner3, product: products[5], rating: 4, comment: 'Drone was in excellent condition. Clear instructions provided by the owner.' },
+   901→  ]
+   902→
+   903→  for (const r of reviewsData) {
+   904→    await db.review.create({
+   905→      data: {
+   906→        rentalId: r.rental.id,
+   907→        reviewerId: r.reviewer.id,
+   908→        targetId: r.target.id,
+   909→        productId: r.product.id,
+   910→        rating: r.rating,
+   911→        comment: r.comment,
+   912→      },
+   913→    })
+   914→  }
+   915→
+   916→  // ─── 8. Coupons ────────────────────────────────────────────
+   917→  console.log('→ Creating coupons...')
+   918→  await db.coupon.createMany({
+   919→    data: [
+   920→      {
+   921→        code: 'SAVE10',
+   922→        type: 'PERCENTAGE',
+   923→        value: 10,
+   924→        minOrder: 500,
+   925→        maxDiscount: 2000,
+   926→        validFrom: daysAgo(30),
+   927→        validUntil: daysFromNow(60),
+   928→        usageLimit: 100,
+   929→        perUserLimit: 1,
+   930→        createdById: admin.id,
+   931→        isActive: true,
+   932→      },
+   933→      {
+   934→        code: 'FLAT100',
+   935→        type: 'FIXED',
+   936→        value: 100,
+   937→        minOrder: 300,
+   938→        validFrom: daysAgo(15),
+   939→        validUntil: daysFromNow(90),
+   940→        usageLimit: 200,
+   941→        perUserLimit: 2,
+   942→        createdById: admin.id,
+   943→        isActive: true,
+   944→      },
+   945→    ],
+   946→  })
+   947→
+   948→  // ─── 9. Notifications ─────────────────────────────────────
+   949→  console.log('→ Creating notifications...')
+   950→  await db.notification.createMany({
+   951→    data: [
+   952→      { userId: owner1.id, title: 'New Rental Request', message: 'Amit Kumar has requested to rent your Canon EOS R10 Camera.', type: 'RENTAL_REQUEST' },
+   953→      { userId: cust1.id, title: 'Rental Accepted', message: 'Your rental request for Canon EOS R10 Camera has been accepted.', type: 'RENTAL_UPDATE' },
+   954→      { userId: owner2.id, title: 'New Rental Request', message: 'Sneha Iyer has requested to rent your Sony PlayStation 5.', type: 'RENTAL_REQUEST' },
+   955→      { userId: cust2.id, title: 'Rental Started', message: 'Your rental for Sony PlayStation 5 has started. Enjoy!', type: 'RENTAL_UPDATE' },
+   956→      { userId: owner3.id, title: 'New Rental Request', message: 'Rohan Das has requested to rent your MacBook Pro M3.', type: 'RENTAL_REQUEST' },
+   957→      { userId: cust4.id, title: 'Return Reminder', message: 'Your rental for DSLR Nikon D850 is due for return tomorrow.', type: 'RETURN' },
+   958→      { userId: cust5.id, title: 'Overdue Notice', message: 'Your rental for JBL Bluetooth Speaker is overdue. Please return it as soon as possible.', type: 'OVERDUE' },
+   959→      { userId: owner1.id, title: 'Product Approved', message: 'Your product Canon EOS R10 Camera has been approved and is now live.', type: 'PRODUCT_UPDATE' },
+   960→      { userId: cust3.id, title: 'Payment Received', message: 'Payment of ₹8,160 for DJI Drone rental has been received.', type: 'PAYMENT' },
+   961→      { userId: admin.id, title: 'New Dispute Filed', message: 'A new dispute has been filed for rental #RNT001. Please review.', type: 'DISPUTE', data: '{"rentalId": "RNT001"}' },
+   962→    ],
+   963→  })
+   964→
+   965→  // ─── 10. Favorites ────────────────────────────────────────
+   966→  console.log('→ Creating favorites...')
+   967→  await db.favorite.createMany({
+   968→    data: [
+   969→      { userId: cust1.id, productId: products[0].id },  // Canon EOS R10
+   970→      { userId: cust1.id, productId: products[2].id },  // MacBook Pro
+   971→      { userId: cust1.id, productId: products[5].id },  // DJI Drone
+   972→      { userId: cust2.id, productId: products[1].id },  // PS5
+   973→      { userId: cust2.id, productId: products[8].id },  // Electric Guitar
+   974→      { userId: cust2.id, productId: products[17].id }, // Telescope
+   975→      { userId: cust3.id, productId: products[2].id },  // MacBook Pro
+   976→      { userId: cust3.id, productId: products[10].id }, // Gaming Laptop
+   977→      { userId: cust3.id, productId: products[19].id }, // VR Headset
+   978→      { userId: cust4.id, productId: products[5].id },  // DJI Drone
+   979→      { userId: cust4.id, productId: products[9].id },  // DSLR Nikon
+   980→      { userId: cust4.id, productId: products[28].id }, // Drone Mini
+   981→      { userId: cust5.id, productId: products[4].id },  // Camping Tent
+   982→      { userId: cust5.id, productId: products[3].id },  // Mountain Bike
+   983→      { userId: cust5.id, productId: products[21].id }, // Kayak
+   984→    ],
+   985→  })
+   986→
+   987→  console.log('✅ Seed completed successfully!')
+   988→  console.log(`   States: ${Object.keys(states).length}`)
+   989→  console.log(`   Cities: ${Object.keys(cities).length}`)
+   990→  console.log(`   Areas: ${allAreas.length}`)
+   991→  console.log(`   Categories: ${Object.keys(categories).length}`)
+   992→  console.log(`   Users: ${users.length}`)
+   993→  console.log(`   Products: ${products.length}`)
+   994→  console.log(`   Rentals: ${rentals.length}`)
+   995→  console.log(`   Reviews: ${reviewsData.length}`)
+   996→  console.log(`   Coupons: 2`)
+   997→  console.log(`   Notifications: 10`)
+   998→  console.log(`   Favorites: 15`)
+   999→}
+  1000→
+  1001→seed()
+  1002→  .catch((e) => {
+  1003→    console.error('❌ Seed failed:', e)
+  1004→    process.exit(1)
+  1005→  })
+  1006→  .finally(async () => {
+  1007→    await db.$disconnect()
+  1008→  })
+  1009→

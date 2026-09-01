@@ -1,0 +1,890 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo, useCallback } from 'react';
+     4→import { motion } from 'framer-motion';
+     5→import {
+     6→  ArrowLeft,
+     7→  Star,
+     8→  MapPin,
+     9→  ShieldCheck,
+    10→  Heart,
+    11→  MessageCircle,
+    12→  Truck,
+    13→  CalendarDays,
+    14→  Tag,
+    15→  Clock,
+    16→  AlertTriangle,
+    17→  CheckCircle2,
+    18→  XCircle,
+    19→  Camera,
+    20→  Laptop,
+    21→  Bike,
+    22→  Drill,
+    23→  Sofa,
+    24→  Tent,
+    25→  Gamepad2,
+    26→  Music,
+    27→  BookOpen,
+    28→  Dumbbell,
+    29→  Wrench,
+    30→  Shirt,
+    31→  Baby,
+    32→  Utensils,
+    33→  type LucideIcon,
+    34→} from 'lucide-react';
+    35→import { useQuery, useMutation } from '@tanstack/react-query';
+    36→import { format, differenceInDays, startOfDay, addDays } from 'date-fns';
+    37→import { Button } from '@/components/ui/button';
+    38→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    39→import { Badge } from '@/components/ui/badge';
+    40→import { Separator } from '@/components/ui/separator';
+    41→import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+    42→import { Skeleton } from '@/components/ui/skeleton';
+    43→import { Input } from '@/components/ui/input';
+    44→import { Label } from '@/components/ui/label';
+    45→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    46→import { Calendar } from '@/components/ui/calendar';
+    47→import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+    48→import { useAppStore } from '@/store';
+    49→import { api } from '@/lib/api';
+    50→import type { Product, Review } from '@/types';
+    51→
+    52→const categoryIcons: Record<string, LucideIcon> = {
+    53→  'cameras': Camera,
+    54→  'laptops': Laptop,
+    55→  'bicycles': Bike,
+    56→  'tools': Drill,
+    57→  'furniture': Sofa,
+    58→  'camping': Tent,
+    59→  'gaming': Gamepad2,
+    60→  'musical-instruments': Music,
+    61→  'books': BookOpen,
+    62→  'fitness': Dumbbell,
+    63→  'home-improvement': Wrench,
+    64→  'fashion': Shirt,
+    65→  'baby-equipment': Baby,
+    66→  'kitchen-appliances': Utensils,
+    67→};
+    68→
+    69→const gradientMap: Record<string, string> = {
+    70→  'cameras': 'from-rose-400 to-orange-300',
+    71→  'laptops': 'from-violet-500 to-purple-300',
+    72→  'bicycles': 'from-emerald-400 to-teal-300',
+    73→  'tools': 'from-slate-500 to-gray-400',
+    74→  'furniture': 'from-amber-400 to-yellow-300',
+    75→  'camping': 'from-green-500 to-emerald-300',
+    76→  'gaming': 'from-indigo-500 to-blue-400',
+    77→  'musical-instruments': 'from-pink-500 to-rose-300',
+    78→  'books': 'from-yellow-500 to-amber-300',
+    79→  'fitness': 'from-lime-500 to-green-300',
+    80→  'home-improvement': 'from-zinc-500 to-stone-400',
+    81→  'fashion': 'from-fuchsia-500 to-pink-300',
+    82→  'baby-equipment': 'from-cyan-400 to-sky-300',
+    83→  'kitchen-appliances': 'from-red-400 to-orange-300',
+    84→};
+    85→
+    86→const conditionLabels: Record<string, string> = {
+    87→  NEW: 'New',
+    88→  LIKE_NEW: 'Like New',
+    89→  GOOD: 'Good',
+    90→  FAIR: 'Fair',
+    91→  DAMAGED: 'Damaged',
+    92→};
+    93→
+    94→const conditionColors: Record<string, string> = {
+    95→  NEW: 'bg-emerald-100 text-emerald-700',
+    96→  LIKE_NEW: 'bg-sky-100 text-sky-700',
+    97→  GOOD: 'bg-amber-100 text-amber-700',
+    98→  FAIR: 'bg-orange-100 text-orange-700',
+    99→  DAMAGED: 'bg-red-100 text-red-700',
+   100→};
+   101→
+   102→export default function ProductDetailPage() {
+   103→  const goBack = useAppStore((s) => s.goBack);
+   104→  const navigate = useAppStore((s) => s.navigate);
+   105→  const user = useAppStore((s) => s.user);
+   106→  const setAuthModalOpen = useAppStore((s) => s.setAuthModalOpen);
+   107→  const selectedState = useAppStore((s) => s.selectedState);
+   108→  const viewData = useAppStore((s) => s.viewData);
+   109→
+   110→  const productId = viewData.productId as string;
+   111→
+   112→  // Dates
+   113→  const today = startOfDay(new Date());
+   114→  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+   115→  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+   116→  const [couponCode, setCouponCode] = useState('');
+   117→  const [couponApplied, setCouponApplied] = useState(false);
+   118→  const [couponDiscount, setCouponDiscount] = useState(0);
+   119→  const [isFavorited, setIsFavorited] = useState(false);
+   120→  const [calOpen, setCalOpen] = useState<'start' | 'end' | null>(null);
+   121→
+   122→  // Fetch product
+   123→  const { data: productData, isLoading, isError } = useQuery({
+   124→    queryKey: ['product', productId],
+   125→    queryFn: () => api.getProduct(productId),
+   126→    enabled: !!productId,
+   127→  });
+   128→
+   129→  const product = productData as unknown as Product | undefined;
+   130→
+   131→  // Fetch reviews
+   132→  const { data: reviewsData } = useQuery({
+   133→    queryKey: ['product-reviews', productId],
+   134→    queryFn: () => api.getProductReviews(productId),
+   135→    enabled: !!productId,
+   136→  });
+   137→
+   138→  const reviews = (reviewsData?.reviews ?? []) as unknown as Review[];
+   139→  const reviewsTotal = reviewsData?.total ?? 0;
+   140→
+   141→  // Check availability
+   142→  const { data: availabilityData } = useQuery({
+   143→    queryKey: ['availability', productId, startDate, endDate],
+   144→    queryFn: () =>
+   145→      api.checkAvailability(productId!, format(startDate!, 'yyyy-MM-dd'), format(endDate!, 'yyyy-MM-dd')),
+   146→    enabled: !!productId && !!startDate && !!endDate && !!(differenceInDays(endDate, startDate) > 0),
+   147→  });
+   148→
+   149→  const isAvailable = availabilityData?.available ?? true;
+   150→  const unavailableDates = (availabilityData?.unavailableDates ?? []) as string[];
+   151→
+   152→  // Favorite toggle mutation
+   153→  const favMutation = useMutation({
+   154→    mutationFn: () => api.toggleFavorite(productId),
+   155→    onSuccess: (res) => {
+   156→      setIsFavorited(res.isFavorited);
+   157→    },
+   158→  });
+   159→
+   160→  // Coupon mutation
+   161→  const couponMutation = useMutation({
+   162→    mutationFn: () => api.validateCoupon(couponCode, rentalCalc.rentalAmount),
+   163→    onSuccess: (res: Record<string, unknown>) => {
+   164→      const coupon = res as { valid: boolean; discount: number; message: string };
+   165→      if (coupon.valid) {
+   166→        setCouponApplied(true);
+   167→        setCouponDiscount(coupon.discount as number);
+   168→      }
+   169→    },
+   170→  });
+   171→
+   172→  // Favorite state derived from product data or local toggle
+   173→  const effectiveFavorited = product?.isFavorited ?? isFavorited;
+   174→
+   175→  // Rental Calculator
+   176→  function computeRentalCalc() {
+   177→    if (!product || !startDate || !endDate) {
+   178→      return {
+   179→        days: 0,
+   180→        dailyRate: 0,
+   181→        rentalAmount: 0,
+   182→        platformFee: 0,
+   183→        tax: 0,
+   184→        deliveryFee: 0,
+   185→        securityDeposit: 0,
+   186→        total: 0,
+   187→      };
+   188→    }
+   189→
+   190→    const days = Math.max(differenceInDays(endDate, startDate), 0);
+   191→    const dailyRate = product.dailyPrice;
+   192→    const rentalAmount = days * dailyRate;
+   193→    const platformFee = Math.round(rentalAmount * 0.1);
+   194→    const taxableAmount = rentalAmount + platformFee;
+   195→    const tax = Math.round(taxableAmount * 0.18);
+   196→    const deliveryFee = product.deliveryAvailable ? product.deliveryFee : 0;
+   197→    const securityDeposit = product.securityDeposit;
+   198→    const discount = couponApplied ? couponDiscount : 0;
+   199→    const total = Math.max(rentalAmount + platformFee + tax + deliveryFee + securityDeposit - discount, 0);
+   200→
+   201→    return { days, dailyRate, rentalAmount, platformFee, tax, deliveryFee, securityDeposit, total, discount };
+   202→  }
+   203→
+   204→  const rentalCalc = computeRentalCalc();
+   205→
+   206→  // State match check
+   207→  const stateMismatch = selectedState && product?.stateId && selectedState.id !== product.stateId;
+   208→
+   209→  const handleRentNow = () => {
+   210→    if (!user) {
+   211→      setAuthModalOpen(true);
+   212→      return;
+   213→    }
+   214→    if (stateMismatch) return;
+   215→    if (!startDate || !endDate || !isDateValid) return;
+   216→    // Navigate to create rental flow
+   217→    navigate('dashboard', { createRental: { productId, startDate: format(startDate, 'yyyy-MM-dd'), endDate: format(endDate, 'yyyy-MM-dd'), couponCode: couponApplied ? couponCode : undefined } });
+   218→  };
+   219→
+   220→  const handleMessage = () => {
+   221→    if (!user) {
+   222→      setAuthModalOpen(true);
+   223→      return;
+   224→    }
+   225→    // Navigate to conversation with owner
+   226→    navigate('conversation', { otherUserId: product?.owner.id, productId });
+   227→  };
+   228→
+   229→  const handleApplyCoupon = () => {
+   230→    if (!couponCode.trim()) return;
+   231→    couponMutation.mutate();
+   232→  };
+   233→
+   234→  // Validation messages
+   235→  const dateValidationError = useMemo(() => {
+   236→    if (!startDate || !endDate) return null;
+   237→    const days = differenceInDays(endDate, startDate);
+   238→    if (days <= 0) return 'End date must be after start date.';
+   239→    if (product?.minRentalDays && days < product.minRentalDays)
+   240→      return `Minimum rental is ${product.minRentalDays} day${product.minRentalDays > 1 ? 's' : ''}.`;
+   241→    if (product?.maxRentalDays && days > product.maxRentalDays)
+   242→      return `Maximum rental is ${product.maxRentalDays} days.`;
+   243→    return null;
+   244→  }, [startDate, endDate, product?.minRentalDays, product?.maxRentalDays]);
+   245→
+   246→  const isDateValid = !dateValidationError;
+   247→
+   248→  // Star breakdown
+   249→  const starBreakdown = useMemo(() => {
+   250→    const breakdown = [0, 0, 0, 0, 0]; // 1-5
+   251→    reviews.forEach((r) => {
+   252→      if (r.rating >= 1 && r.rating <= 5) {
+   253→        breakdown[r.rating - 1]++;
+   254→      }
+   255→    });
+   256→    return breakdown;
+   257→  }, [reviews]);
+   258→
+   259→  const disabledDays = useMemo(() => {
+   260→    if (!product?.minRentalDays) return undefined;
+   261→    return (date: Date) => {
+   262→      const d = format(date, 'yyyy-MM-dd');
+   263→      if (unavailableDates.includes(d)) return true;
+   264→      return false;
+   265→    };
+   266→  }, [unavailableDates, product?.minRentalDays]);
+   267→
+   268→  // --- Loading Skeleton ---
+   269→  if (isLoading || !product) {
+   270→    return (
+   271→      <div className="min-h-screen bg-slate-50">
+   272→        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+   273→          <Skeleton className="h-10 w-32 mb-6" />
+   274→          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+   275→            <Skeleton className="aspect-square rounded-xl" />
+   276→            <div className="space-y-4">
+   277→              <Skeleton className="h-8 w-3/4" />
+   278→              <Skeleton className="h-6 w-1/3" />
+   279→              <Skeleton className="h-10 w-1/2" />
+   280→              <Skeleton className="h-40 w-full" />
+   281→              <Skeleton className="h-10 w-full" />
+   282→            </div>
+   283→          </div>
+   284→        </div>
+   285→      </div>
+   286→    );
+   287→  }
+   288→
+   289→  if (isError) {
+   290→    return (
+   291→      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+   292→        <div className="text-center">
+   293→          <AlertTriangle className="h-12 w-12 text-red-400 mx-auto mb-4" />
+   294→          <h2 className="text-xl font-bold text-slate-900 mb-2">Product not found</h2>
+   295→          <Button variant="outline" onClick={goBack} className="mt-4 border-slate-200">
+   296→            Go Back
+   297→          </Button>
+   298→        </div>
+   299→      </div>
+   300→    );
+   301→  }
+   302→
+   303→  const Icon = categoryIcons[product.category.slug] || Camera;
+   304→  const gradient = gradientMap[product.category.slug] || 'from-slate-400 to-gray-300';
+   305→
+   306→  return (
+   307→    <div className="min-h-screen bg-slate-50">
+   308→      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+   309→        {/* Back Button */}
+   310→        <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
+   311→          <button
+   312→            onClick={goBack}
+   313→            className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 transition-colors mb-6 group"
+   314→          >
+   315→            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+   316→            Back to marketplace
+   317→          </button>
+   318→        </motion.div>
+   319→
+   320→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+   321→          {/* Left: Image Gallery */}
+   322→          <motion.div
+   323→            initial={{ opacity: 0, y: 20 }}
+   324→            animate={{ opacity: 1, y: 0 }}
+   325→            transition={{ duration: 0.4 }}
+   326→          >
+   327→            <div className="aspect-square rounded-xl overflow-hidden bg-white border border-slate-200 shadow-sm">
+   328→              {product.images.length > 0 ? (
+   329→                <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>{/* placeholder */}
+   330→                  <Icon className="h-24 w-24 text-white/60" strokeWidth={1.5} />
+   331→                </div>
+   332→              ) : (
+   333→                <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+   334→                  <Icon className="h-32 w-32 text-white/60" strokeWidth={1.5} />
+   335→                </div>
+   336→              )}
+   337→            </div>
+   338→          </motion.div>
+   339→
+   340→          {/* Right: Product Info */}
+   341→          <motion.div
+   342→            initial={{ opacity: 0, y: 20 }}
+   343→            animate={{ opacity: 1, y: 0 }}
+   344→            transition={{ duration: 0.4, delay: 0.1 }}
+   345→            className="space-y-5"
+   346→          >
+   347→            {/* Title & Badges */}
+   348→            <div>
+   349→              <div className="flex items-start gap-3 mb-3">
+   350→                <div className="flex-1">
+   351→                  <h1 className="text-2xl font-bold text-slate-900 leading-tight">{product.title}</h1>
+   352→                  <div className="flex flex-wrap items-center gap-2 mt-2">
+   353→                    <Badge variant="secondary" className="text-xs bg-slate-100 text-slate-700">
+   354→                      {product.category.name}
+   355→                    </Badge>
+   356→                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${conditionColors[product.condition] || 'bg-slate-100 text-slate-600'}`}>
+   357→                      {conditionLabels[product.condition] || product.condition}
+   358→                    </span>
+   359→                    {product.brand && (
+   360→                      <span className="text-xs text-slate-500">{product.brand}{product.model ? ` · ${product.model}` : ''}</span>
+   361→                    )}
+   362→                  </div>
+   363→                </div>
+   364→                <button
+   365→                  onClick={() => user && favMutation.mutate()}
+   366→                  className="p-2 rounded-full border border-slate-200 hover:bg-red-50 transition-colors"
+   367→                  aria-label="Toggle favorite"
+   368→                >
+   369→                  <Heart className={`h-5 w-5 ${effectiveFavorited ? 'fill-red-500 text-red-500' : 'text-slate-400'}`} />
+   370→                </button>
+   371→              </div>
+   372→
+   373→              {/* Rating */}
+   374→              <div className="flex items-center gap-2">
+   375→                <div className="flex items-center gap-1">
+   376→                  {Array.from({ length: 5 }, (_, i) => (
+   377→                    <Star
+   378→                      key={i}
+   379→                      className={`h-4 w-4 ${
+   380→                        i < Math.round(product.avgRating)
+   381→                          ? 'fill-amber-400 text-amber-400'
+   382→                          : 'fill-slate-200 text-slate-200'
+   383→                      }`}
+   384→                    />
+   385→                  ))}
+   386→                </div>
+   387→                <span className="text-sm font-medium text-slate-700">
+   388→                  {product.avgRating > 0 ? product.avgRating.toFixed(1) : 'No ratings yet'}
+   389→                </span>
+   390→                <span className="text-sm text-slate-400">
+   391→                  ({product.totalReviews} review{product.totalReviews !== 1 ? 's' : ''})
+   392→                </span>
+   393→                <span className="text-sm text-slate-400">·</span>
+   394→                <span className="text-sm text-slate-400">{product.totalRentals} rental{product.totalRentals !== 1 ? 's' : ''}</span>
+   395→              </div>
+   396→            </div>
+   397→
+   398→            <Separator />
+   399→
+   400→            {/* Price Section */}
+   401→            <div className="bg-white rounded-xl border border-slate-200 p-5">
+   402→              <div className="flex items-baseline gap-2 mb-3">
+   403→                <span className="text-3xl font-bold text-emerald-600">₹{product.dailyPrice.toLocaleString('en-IN')}</span>
+   404→                <span className="text-sm text-slate-400">/day</span>
+   405→              </div>
+   406→              {product.weeklyPrice && (
+   407→                <div className="flex items-baseline gap-2 mb-2">
+   408→                  <span className="text-lg font-semibold text-slate-700">₹{product.weeklyPrice.toLocaleString('en-IN')}</span>
+   409→                  <span className="text-sm text-slate-400">/week</span>
+   410→                  <Badge variant="secondary" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+   411→                    Save {Math.round((1 - product.weeklyPrice / (product.dailyPrice * 7)) * 100)}%
+   412→                  </Badge>
+   413→                </div>
+   414→              )}
+   415→              <div className="flex items-center gap-4 text-sm text-slate-500">
+   416→                <span>Security Deposit: <strong className="text-slate-700">₹{product.securityDeposit.toLocaleString('en-IN')}</strong></span>
+   417→                {product.deliveryAvailable && (
+   418→                  <span className="flex items-center gap-1 text-emerald-600">
+   419→                    <Truck className="h-4 w-4" />
+   420→                    Delivery ₹{product.deliveryFee.toLocaleString('en-IN')}
+   421→                  </span>
+   422→                )}
+   423→              </div>
+   424→            </div>
+   425→
+   426→            {/* Owner Info */}
+   427→            <Card className="border-slate-200">
+   428→              <CardContent className="p-4">
+   429→                <div className="flex items-center justify-between">
+   430→                  <div className="flex items-center gap-3">
+   431→                    <Avatar className="h-11 w-11">
+   432→                      <AvatarFallback className="bg-[#0f172a] text-white text-sm font-semibold">
+   433→                        {product.owner.name.charAt(0).toUpperCase()}
+   434→                      </AvatarFallback>
+   435→                    </Avatar>
+   436→                    <div>
+   437→                      <div className="flex items-center gap-1.5">
+   438→                        <span className="font-semibold text-slate-900 text-sm">{product.owner.name}</span>
+   439→                        {product.owner.isVerified && (
+   440→                          <ShieldCheck className="h-4 w-4 text-emerald-500" />
+   441→                        )}
+   442→                      </div>
+   443→                      <div className="flex items-center gap-2 text-xs text-slate-500">
+   444→                        <span className="flex items-center gap-0.5">
+   445→                          <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+   446→                          {product.owner.avgRating > 0 ? product.owner.avgRating.toFixed(1) : 'New'}
+   447→                        </span>
+   448→                        <span>·</span>
+   449→                        <span>{product.totalRentals} rentals</span>
+   450→                        <span>·</span>
+   451→                        <span>Trust: {product.owner.trustScore}%</span>
+   452→                      </div>
+   453→                    </div>
+   454→                  </div>
+   455→                  <Button
+   456→                    variant="outline"
+   457→                    size="sm"
+   458→                    onClick={handleMessage}
+   459→                    className="border-slate-200 text-slate-700 hover:bg-slate-50 gap-1.5"
+   460→                  >
+   461→                    <MessageCircle className="h-4 w-4" />
+   462→                    Message
+   463→                  </Button>
+   464→                </div>
+   465→              </CardContent>
+   466→            </Card>
+   467→
+   468→            {/* Location */}
+   469→            <div className="flex items-start gap-3 bg-white rounded-xl border border-slate-200 p-4">
+   470→              <MapPin className="h-5 w-5 text-slate-400 mt-0.5 shrink-0" />
+   471→              <div className="flex-1 min-w-0">
+   472→                <div className="text-sm font-medium text-slate-900">
+   473→                  {product.city?.name}{product.state?.name ? `, ${product.state.name}` : ''}
+   474→                </div>
+   475→                {product.pickupAddress && (
+   476→                  <p className="text-xs text-slate-500 mt-0.5">{product.pickupAddress}</p>
+   477→                )}
+   478→                <div className="flex flex-wrap gap-2 mt-2">
+   479→                  {product.deliveryAvailable && (
+   480→                    <Badge variant="secondary" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
+   481→                      <Truck className="h-3 w-3" />
+   482→                      Delivery Available
+   483→                    </Badge>
+   484→                  )}
+   485→                </div>
+   486→              </div>
+   487→            </div>
+   488→
+   489→            {/* State Mismatch Warning */}
+   490→            {stateMismatch && (
+   491→              <motion.div
+   492→                initial={{ opacity: 0, y: -10 }}
+   493→                animate={{ opacity: 1, y: 0 }}
+   494→                className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200"
+   495→              >
+   496→                <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+   497→                <div>
+   498→                  <p className="text-sm font-semibold text-amber-800">This item is not available in your state</p>
+   499→                  <p className="text-xs text-amber-600 mt-1">
+   500→                    This item is listed in {product.state?.name}. You selected {selectedState?.name} as your location. Rental is only available within your state.
+   501→                  </p>
+   502→                </div>
+   503→              </motion.div>
+   504→            )}
+   505→
+   506→            <Separator />
+   507→
+   508→            {/* Tabs: Description, Rules, Cancellation */}
+   509→            <Tabs defaultValue="description" className="w-full">
+   510→              <TabsList className="bg-slate-100 w-full h-10">
+   511→                <TabsTrigger value="description" className="text-xs sm:text-sm flex-1">Description</TabsTrigger>
+   512→                <TabsTrigger value="rules" className="text-xs sm:text-sm flex-1">Rental Rules</TabsTrigger>
+   513→                <TabsTrigger value="cancellation" className="text-xs sm:text-sm flex-1">Cancellation</TabsTrigger>
+   514→              </TabsList>
+   515→              <TabsContent value="description" className="mt-4">
+   516→                <div className="bg-white rounded-xl border border-slate-200 p-5">
+   517→                  <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
+   518→                    {product.description || 'No description provided.'}
+   519→                  </p>
+   520→                  <div className="grid grid-cols-2 gap-3 mt-4">
+   521→                    {product.brand && (
+   522→                      <div className="text-xs"><span className="text-slate-400">Brand:</span> <span className="font-medium text-slate-700">{product.brand}</span></div>
+   523→                    )}
+   524→                    {product.model && (
+   525→                      <div className="text-xs"><span className="text-slate-400">Model:</span> <span className="font-medium text-slate-700">{product.model}</span></div>
+   526→                    )}
+   527→                    {product.purchaseYear && (
+   528→                      <div className="text-xs"><span className="text-slate-400">Year:</span> <span className="font-medium text-slate-700">{product.purchaseYear}</span></div>
+   529→                    )}
+   530→                    <div className="text-xs"><span className="text-slate-400">Min Rental:</span> <span className="font-medium text-slate-700">{product.minRentalDays} day{product.minRentalDays > 1 ? 's' : ''}</span></div>
+   531→                    <div className="text-xs"><span className="text-slate-400">Max Rental:</span> <span className="font-medium text-slate-700">{product.maxRentalDays} days</span></div>
+   532→                  </div>
+   533→                </div>
+   534→              </TabsContent>
+   535→              <TabsContent value="rules" className="mt-4">
+   536→                <div className="bg-white rounded-xl border border-slate-200 p-5">
+   537→                  <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
+   538→                    {product.rentalRules || 'No specific rental rules provided by the owner.'}
+   539→                  </p>
+   540→                </div>
+   541→              </TabsContent>
+   542→              <TabsContent value="cancellation" className="mt-4">
+   543→                <div className="bg-white rounded-xl border border-slate-200 p-5">
+   544→                  <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
+   545→                    {product.cancellationPolicy || 'Standard cancellation policy applies. Please contact the owner for details.'}
+   546→                  </p>
+   547→                </div>
+   548→              </TabsContent>
+   549→            </Tabs>
+   550→
+   551→            <Separator />
+   552→
+   553→            {/* Rental Calculator */}
+   554→            <Card className="border-slate-200 shadow-sm">
+   555→              <CardHeader className="pb-3">
+   556→                <CardTitle className="text-base flex items-center gap-2">
+   557→                  <CalendarDays className="h-5 w-5 text-emerald-600" />
+   558→                  Rental Calculator
+   559→                </CardTitle>
+   560→              </CardHeader>
+   561→              <CardContent className="space-y-4">
+   562→                {/* Date Pickers */}
+   563→                <div className="grid grid-cols-2 gap-3">
+   564→                  <div className="space-y-1.5">
+   565→                    <Label className="text-xs font-medium text-slate-700">Start Date</Label>
+   566→                    <Popover open={calOpen === 'start'} onOpenChange={(o) => setCalOpen(o ? 'start' : null)}>
+   567→                      <PopoverTrigger asChild>
+   568→                        <Button
+   569→                          variant="outline"
+   570→                          className="w-full justify-start text-left font-normal h-10 border-slate-200"
+   571→                        >
+   572→                          {startDate ? format(startDate, 'dd MMM yyyy') : 'Pick a date'}
+   573→                        </Button>
+   574→                      </PopoverTrigger>
+   575→                      <PopoverContent className="w-auto p-0" align="start">
+   576→                        <Calendar
+   577→                          mode="single"
+   578→                          selected={startDate}
+   579→                          onSelect={(d) => {
+   580→                            setStartDate(d);
+   581→                            if (d && endDate && differenceInDays(endDate, d) < 0) {
+   582→                              setEndDate(undefined);
+   583→                            }
+   584→                            setCalOpen(null);
+   585→                          }}
+   586→                          disabled={{ before: today }}
+   587→                        />
+   588→                      </PopoverContent>
+   589→                    </Popover>
+   590→                  </div>
+   591→                  <div className="space-y-1.5">
+   592→                    <Label className="text-xs font-medium text-slate-700">End Date</Label>
+   593→                    <Popover open={calOpen === 'end'} onOpenChange={(o) => setCalOpen(o ? 'end' : null)}>
+   594→                      <PopoverTrigger asChild>
+   595→                        <Button
+   596→                          variant="outline"
+   597→                          className={`w-full justify-start text-left font-normal h-10 border-slate-200 ${!startDate ? 'opacity-50 cursor-not-allowed' : ''}`}
+   598→                          disabled={!startDate}
+   599→                        >
+   600→                          {endDate ? format(endDate, 'dd MMM yyyy') : 'Pick a date'}
+   601→                        </Button>
+   602→                      </PopoverTrigger>
+   603→                      <PopoverContent className="w-auto p-0" align="start">
+   604→                        <Calendar
+   605→                          mode="single"
+   606→                          selected={endDate}
+   607→                          onSelect={(d) => {
+   608→                            setEndDate(d);
+   609→                            setCalOpen(null);
+   610→                          }}
+   611→                          disabled={{ before: addDays(startDate!, product?.minRentalDays ? product.minRentalDays : 1) }}
+   612→                        />
+   613→                      </PopoverContent>
+   614→                    </Popover>
+   615→                  </div>
+   616→                </div>
+   617→
+   618→                {/* Date Validation Error */}
+   619→                {startDate && endDate && dateValidationError && (
+   620→                  <motion.div
+   621→                    initial={{ opacity: 0, y: -5 }}
+   622→                    animate={{ opacity: 1, y: 0 }}
+   623→                    className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200"
+   624→                  >
+   625→                    <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+   626→                    <span className="text-sm text-red-700">{dateValidationError}</span>
+   627→                  </motion.div>
+   628→                )}
+   629→
+   630→                {/* Calculation Breakdown */}
+   631→                {startDate && endDate && rentalCalc.days > 0 && (
+   632→                  <motion.div
+   633→                    initial={{ opacity: 0, height: 0 }}
+   634→                    animate={{ opacity: 1, height: 'auto' }}
+   635→                    className="space-y-3 bg-slate-50 rounded-lg p-4"
+   636→                  >
+   637→                    <div className="flex justify-between text-sm">
+   638→                      <span className="text-slate-600">Rental Duration</span>
+   639→                      <span className="font-medium text-slate-900">{rentalCalc.days} day{rentalCalc.days > 1 ? 's' : ''}</span>
+   640→                    </div>
+   641→                    <div className="flex justify-between text-sm">
+   642→                      <span className="text-slate-600">Daily Rate</span>
+   643→                      <span className="font-medium text-slate-900">₹{rentalCalc.dailyRate.toLocaleString('en-IN')}</span>
+   644→                    </div>
+   645→                    <div className="flex justify-between text-sm">
+   646→                      <span className="text-slate-600">Rental Amount</span>
+   647→                      <span className="font-medium text-slate-900">₹{rentalCalc.rentalAmount.toLocaleString('en-IN')}</span>
+   648→                    </div>
+   649→                    <div className="flex justify-between text-sm">
+   650→                      <span className="text-slate-600">Platform Fee (10%)</span>
+   651→                      <span className="font-medium text-slate-900">₹{rentalCalc.platformFee.toLocaleString('en-IN')}</span>
+   652→                    </div>
+   653→                    <div className="flex justify-between text-sm">
+   654→                      <span className="text-slate-600">Tax (18% GST)</span>
+   655→                      <span className="font-medium text-slate-900">₹{rentalCalc.tax.toLocaleString('en-IN')}</span>
+   656→                    </div>
+   657→                    {rentalCalc.deliveryFee > 0 && (
+   658→                      <div className="flex justify-between text-sm">
+   659→                        <span className="text-slate-600">Delivery Fee</span>
+   660→                        <span className="font-medium text-slate-900">₹{rentalCalc.deliveryFee.toLocaleString('en-IN')}</span>
+   661→                      </div>
+   662→                    )}
+   663→                    <div className="flex justify-between text-sm">
+   664→                      <span className="text-slate-600">Security Deposit</span>
+   665→                      <span className="font-medium text-slate-900">₹{rentalCalc.securityDeposit.toLocaleString('en-IN')}</span>
+   666→                    </div>
+   667→                    {couponApplied && rentalCalc.discount > 0 && (
+   668→                      <div className="flex justify-between text-sm text-emerald-600">
+   669→                        <span className="font-medium">Coupon Discount</span>
+   670→                        <span className="font-medium">-₹{rentalCalc.discount.toLocaleString('en-IN')}</span>
+   671→                      </div>
+   672→                    )}
+   673→                    <Separator />
+   674→                    <div className="flex justify-between text-base font-bold">
+   675→                      <span className="text-slate-900">Total</span>
+   676→                      <span className="text-emerald-600">₹{rentalCalc.total.toLocaleString('en-IN')}</span>
+   677→                    </div>
+   678→                  </motion.div>
+   679→                )}
+   680→
+   681→                {/* Coupon Code */}
+   682→                <div className="flex gap-2">
+   683→                  <div className="relative flex-1">
+   684→                    <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+   685→                    <Input
+   686→                      placeholder="Coupon code"
+   687→                      value={couponCode}
+   688→                      onChange={(e) => { setCouponCode(e.target.value); setCouponApplied(false); setCouponDiscount(0); }}
+   689→                      className="pl-9 h-10 border-slate-200"
+   690→                      disabled={!startDate || !endDate || !isDateValid}
+   691→                    />
+   692→                  </div>
+   693→                  <Button
+   694→                    variant="outline"
+   695→                    onClick={handleApplyCoupon}
+   696→                    disabled={!couponCode.trim() || !startDate || !endDate || !isDateValid || couponMutation.isPending}
+   697→                    className="h-10 border-slate-200"
+   698→                  >
+   699→                    {couponMutation.isPending ? 'Applying...' : 'Apply'}
+   700→                  </Button>
+   701→                </div>
+   702→                {couponApplied && (
+   703→                  <div className="flex items-center gap-1.5 text-xs text-emerald-600">
+   704→                    <CheckCircle2 className="h-3.5 w-3.5" />
+   705→                    Coupon applied! You save ₹{couponDiscount.toLocaleString('en-IN')}
+   706→                  </div>
+   707→                )}
+   708→                {couponMutation.isError && (
+   709→                  <div className="flex items-center gap-1.5 text-xs text-red-600">
+   710→                    <XCircle className="h-3.5 w-3.5" />
+   711→                    Invalid coupon code
+   712→                  </div>
+   713→                )}
+   714→
+   715→                {/* Rent Now CTA */}
+   716→                <Button
+   717→                  size="lg"
+   718→                  className={`w-full h-12 text-base font-semibold ${
+   719→                    stateMismatch || !startDate || !endDate || !isDateValid
+   720→                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+   721→                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+   722→                  }`}
+   723→                  onClick={handleRentNow}
+   724→                  disabled={stateMismatch || !startDate || !endDate || !isDateValid}
+   725→                >
+   726→                  {stateMismatch
+   727→                    ? 'Not Available in Your State'
+   728→                    : !startDate
+   729→                      ? 'Select Start Date'
+   730→                      : !endDate
+   731→                        ? 'Select End Date'
+   732→                        : dateValidationError || 'Rent Now'}
+   733→                </Button>
+   734→
+   735→                {!user && startDate && endDate && rentalCalc.days > 0 && !stateMismatch && (
+   736→                  <p className="text-xs text-center text-slate-500">
+   737→                    You&apos;ll need to sign in to complete the rental
+   738→                  </p>
+   739→                )}
+   740→              </CardContent>
+   741→            </Card>
+   742→          </motion.div>
+   743→        </div>
+   744→
+   745→        {/* Availability Calendar & Reviews - Below */}
+   746→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-10">
+   747→          {/* Availability Calendar */}
+   748→          <motion.div
+   749→            initial={{ opacity: 0, y: 20 }}
+   750→            animate={{ opacity: 1, y: 0 }}
+   751→            transition={{ duration: 0.4, delay: 0.2 }}
+   752→          >
+   753→            <Card className="border-slate-200">
+   754→              <CardHeader className="pb-3">
+   755→                <CardTitle className="text-base flex items-center gap-2">
+   756→                  <Clock className="h-5 w-5 text-emerald-600" />
+   757→                  Availability
+   758→                </CardTitle>
+   759→              </CardHeader>
+   760→              <CardContent>
+   761→                <div className="flex justify-center">
+   762→                  <Calendar
+   763→                    mode="default"
+   764→                    modifiers={{
+   765→                      unavailable: unavailableDates.map((d) => new Date(d + 'T00:00:00')),
+   766→                    }}
+   767→                    modifiersClassNames={{
+   768→                      unavailable: 'bg-red-100 text-red-600 line-through opacity-60',
+   769→                    }}
+   770→                    disabled={[{ before: today }]}
+   771→                    className="rounded-md border"
+   772→                  />
+   773→                </div>
+   774→                <div className="flex items-center gap-4 mt-4 text-xs text-slate-500">
+   775→                  <div className="flex items-center gap-1.5">
+   776→                    <div className="w-3 h-3 rounded bg-emerald-200 border border-emerald-300" />
+   777→                    <span>Available</span>
+   778→                  </div>
+   779→                  <div className="flex items-center gap-1.5">
+   780→                    <div className="w-3 h-3 rounded bg-red-100 border border-red-200" />
+   781→                    <span>Unavailable</span>
+   782→                  </div>
+   783→                </div>
+   784→              </CardContent>
+   785→            </Card>
+   786→          </motion.div>
+   787→
+   788→          {/* Reviews Section */}
+   789→          <motion.div
+   790→            initial={{ opacity: 0, y: 20 }}
+   791→            animate={{ opacity: 1, y: 0 }}
+   792→            transition={{ duration: 0.4, delay: 0.3 }}
+   793→          >
+   794→            <Card className="border-slate-200">
+   795→              <CardHeader className="pb-3">
+   796→                <CardTitle className="text-base flex items-center gap-2">
+   797→                  <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
+   798→                  Reviews ({reviewsTotal})
+   799→                </CardTitle>
+   800→              </CardHeader>
+   801→              <CardContent className="space-y-5">
+   802→                {/* Star Breakdown */}
+   803→                <div className="flex items-start gap-4">
+   804→                  <div className="text-center">
+   805→                    <div className="text-3xl font-bold text-slate-900">
+   806→                      {product.avgRating > 0 ? product.avgRating.toFixed(1) : '—'}
+   807→                    </div>
+   808→                    <div className="flex items-center gap-0.5 mt-1">
+   809→                      {Array.from({ length: 5 }, (_, i) => (
+   810→                        <Star
+   811→                          key={i}
+   812→                          className={`h-3.5 w-3.5 ${
+   813→                            i < Math.round(product.avgRating) ? 'fill-amber-400 text-amber-400' : 'fill-slate-200 text-slate-200'
+   814→                          }`}
+   815→                        />
+   816→                      ))}
+   817→                    </div>
+   818→                    <p className="text-xs text-slate-400 mt-1">{reviewsTotal} review{reviewsTotal !== 1 ? 's' : ''}</p>
+   819→                  </div>
+   820→                  <div className="flex-1 space-y-1.5">
+   821→                    {[5, 4, 3, 2, 1].map((star) => {
+   822→                      const count = starBreakdown[star - 1];
+   823→                      const pct = reviews.length > 0 ? (count / reviews.length) * 100 : 0;
+   824→                      return (
+   825→                        <div key={star} className="flex items-center gap-2 text-xs">
+   826→                          <span className="w-3 text-right text-slate-600">{star}</span>
+   827→                          <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+   828→                          <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+   829→                            <div
+   830→                              className="h-full bg-amber-400 rounded-full transition-all duration-500"
+   831→                              style={{ width: `${pct}%` }}
+   832→                            />
+   833→                          </div>
+   834→                          <span className="w-6 text-right text-slate-400">{count}</span>
+   835→                        </div>
+   836→                      );
+   837→                    })}
+   838→                  </div>
+   839→                </div>
+   840→
+   841→                <Separator />
+   842→
+   843→                {/* Review List */}
+   844→                <div className="space-y-4 max-h-80 overflow-y-auto pr-1">
+   845→                  {reviews.length === 0 ? (
+   846→                    <p className="text-sm text-slate-400 text-center py-6">No reviews yet. Be the first to review this item!</p>
+   847→                  ) : (
+   848→                    reviews.map((review) => (
+   849→                      <div key={review.id} className="pb-4 border-b border-slate-100 last:border-0 last:pb-0">
+   850→                        <div className="flex items-center gap-2.5 mb-2">
+   851→                          <Avatar className="h-8 w-8">
+   852→                            <AvatarFallback className="bg-slate-100 text-slate-600 text-xs font-semibold">
+   853→                              {review.reviewer.name.charAt(0).toUpperCase()}
+   854→                            </AvatarFallback>
+   855→                          </Avatar>
+   856→                          <div className="flex-1 min-w-0">
+   857→                            <div className="flex items-center gap-2">
+   858→                              <span className="text-sm font-medium text-slate-900 truncate">{review.reviewer.name}</span>
+   859→                              <span className="text-xs text-slate-400">
+   860→                                {format(new Date(review.createdAt), 'dd MMM yyyy')}
+   861→                              </span>
+   862→                            </div>
+   863→                            <div className="flex items-center gap-0.5">
+   864→                              {Array.from({ length: 5 }, (_, i) => (
+   865→                                <Star
+   866→                                  key={i}
+   867→                                  className={`h-3 w-3 ${
+   868→                                    i < review.rating ? 'fill-amber-400 text-amber-400' : 'fill-slate-200 text-slate-200'
+   869→                                  }`}
+   870→                                />
+   871→                              ))}
+   872→                            </div>
+   873→                          </div>
+   874→                        </div>
+   875→                        {review.comment && (
+   876→                          <p className="text-sm text-slate-600 leading-relaxed ml-10">{review.comment}</p>
+   877→                        )}
+   878→                      </div>
+   879→                    ))
+   880→                  )}
+   881→                </div>
+   882→              </CardContent>
+   883→            </Card>
+   884→          </motion.div>
+   885→        </div>
+   886→      </div>
+   887→    </div>
+   888→  );
+   889→}
+   890→

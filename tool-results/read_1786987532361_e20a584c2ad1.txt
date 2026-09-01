@@ -1,0 +1,698 @@
+   170→        setCouponDiscount(coupon.discount as number);
+   171→      }
+   172→    },
+   173→  });
+   174→
+   175→  // Auto-favorite from product data
+   176→  useEffect(() => {
+   177→    if (product) {
+   178→      setIsFavorited(product.isFavorited ?? false);
+   179→    }
+   180→  }, [product]);
+   181→
+   182→  // Rental Calculator
+   183→  const rentalCalc = useMemo(() => {
+   184→    if (!product || !startDate || !endDate) {
+   185→      return {
+   186→        days: 0,
+   187→        dailyRate: 0,
+   188→        rentalAmount: 0,
+   189→        platformFee: 0,
+   190→        tax: 0,
+   191→        deliveryFee: 0,
+   192→        securityDeposit: 0,
+   193→        total: 0,
+   194→      };
+   195→    }
+   196→
+   197→    const days = Math.max(differenceInDays(endDate, startDate), 0);
+   198→    const dailyRate = product.dailyPrice;
+   199→    const rentalAmount = days * dailyRate;
+   200→    const platformFee = Math.round(rentalAmount * 0.1);
+   201→    const taxableAmount = rentalAmount + platformFee;
+   202→    const tax = Math.round(taxableAmount * 0.18);
+   203→    const deliveryFee = product.deliveryAvailable ? product.deliveryFee : 0;
+   204→    const securityDeposit = product.securityDeposit;
+   205→    const discount = couponApplied ? couponDiscount : 0;
+   206→    const total = Math.max(rentalAmount + platformFee + tax + deliveryFee + securityDeposit - discount, 0);
+   207→
+   208→    return { days, dailyRate, rentalAmount, platformFee, tax, deliveryFee, securityDeposit, total, discount };
+   209→  }, [product, startDate, endDate, couponApplied, couponDiscount]);
+   210→
+   211→  // State match check
+   212→  const stateMismatch = selectedState && product?.stateId && selectedState.id !== product.stateId;
+   213→
+   214→  const handleRentNow = () => {
+   215→    if (!user) {
+   216→      setAuthModalOpen(true);
+   217→      return;
+   218→    }
+   219→    if (stateMismatch) return;
+   220→    if (!startDate || !endDate || rentalCalc.days <= 0) return;
+   221→    // Navigate to create rental flow
+   222→    navigate('dashboard', { createRental: { productId, startDate: format(startDate, 'yyyy-MM-dd'), endDate: format(endDate, 'yyyy-MM-dd'), couponCode: couponApplied ? couponCode : undefined } });
+   223→  };
+   224→
+   225→  const handleMessage = () => {
+   226→    if (!user) {
+   227→      setAuthModalOpen(true);
+   228→      return;
+   229→    }
+   230→    // Navigate to conversation with owner
+   231→    navigate('conversation', { otherUserId: product?.owner.id, productId });
+   232→  };
+   233→
+   234→  const handleApplyCoupon = () => {
+   235→    if (!couponCode.trim()) return;
+   236→    couponMutation.mutate();
+   237→  };
+   238→
+   239→  // Star breakdown
+   240→  const starBreakdown = useMemo(() => {
+   241→    const breakdown = [0, 0, 0, 0, 0]; // 1-5
+   242→    reviews.forEach((r) => {
+   243→      if (r.rating >= 1 && r.rating <= 5) {
+   244→        breakdown[r.rating - 1]++;
+   245→      }
+   246→    });
+   247→    return breakdown;
+   248→  }, [reviews]);
+   249→
+   250→  const disabledDays = useMemo(() => {
+   251→    if (!product?.minRentalDays) return undefined;
+   252→    return (date: Date) => {
+   253→      const d = format(date, 'yyyy-MM-dd');
+   254→      if (unavailableDates.includes(d)) return true;
+   255→      return false;
+   256→    };
+   257→  }, [unavailableDates, product?.minRentalDays]);
+   258→
+   259→  // --- Loading Skeleton ---
+   260→  if (isLoading || !product) {
+   261→    return (
+   262→      <div className="min-h-screen bg-slate-50">
+   263→        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+   264→          <Skeleton className="h-10 w-32 mb-6" />
+   265→          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+   266→            <Skeleton className="aspect-square rounded-xl" />
+   267→            <div className="space-y-4">
+   268→              <Skeleton className="h-8 w-3/4" />
+   269→              <Skeleton className="h-6 w-1/3" />
+   270→              <Skeleton className="h-10 w-1/2" />
+   271→              <Skeleton className="h-40 w-full" />
+   272→              <Skeleton className="h-10 w-full" />
+   273→            </div>
+   274→          </div>
+   275→        </div>
+   276→      </div>
+   277→    );
+   278→  }
+   279→
+   280→  if (isError) {
+   281→    return (
+   282→      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+   283→        <div className="text-center">
+   284→          <AlertTriangle className="h-12 w-12 text-red-400 mx-auto mb-4" />
+   285→          <h2 className="text-xl font-bold text-slate-900 mb-2">Product not found</h2>
+   286→          <Button variant="outline" onClick={goBack} className="mt-4 border-slate-200">
+   287→            Go Back
+   288→          </Button>
+   289→        </div>
+   290→      </div>
+   291→    );
+   292→  }
+   293→
+   294→  const Icon = categoryIcons[product.category.slug] || Camera;
+   295→  const gradient = gradientMap[product.category.slug] || 'from-slate-400 to-gray-300';
+   296→
+   297→  return (
+   298→    <div className="min-h-screen bg-slate-50">
+   299→      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+   300→        {/* Back Button */}
+   301→        <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
+   302→          <button
+   303→            onClick={goBack}
+   304→            className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 transition-colors mb-6 group"
+   305→          >
+   306→            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+   307→            Back to marketplace
+   308→          </button>
+   309→        </motion.div>
+   310→
+   311→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+   312→          {/* Left: Image Gallery */}
+   313→          <motion.div
+   314→            initial={{ opacity: 0, y: 20 }}
+   315→            animate={{ opacity: 1, y: 0 }}
+   316→            transition={{ duration: 0.4 }}
+   317→          >
+   318→            <div className="aspect-square rounded-xl overflow-hidden bg-white border border-slate-200 shadow-sm">
+   319→              {product.images.length > 0 ? (
+   320→                <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>{/* placeholder */}
+   321→                  <Icon className="h-24 w-24 text-white/60" strokeWidth={1.5} />
+   322→                </div>
+   323→              ) : (
+   324→                <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+   325→                  <Icon className="h-32 w-32 text-white/60" strokeWidth={1.5} />
+   326→                </div>
+   327→              )}
+   328→            </div>
+   329→          </motion.div>
+   330→
+   331→          {/* Right: Product Info */}
+   332→          <motion.div
+   333→            initial={{ opacity: 0, y: 20 }}
+   334→            animate={{ opacity: 1, y: 0 }}
+   335→            transition={{ duration: 0.4, delay: 0.1 }}
+   336→            className="space-y-5"
+   337→          >
+   338→            {/* Title & Badges */}
+   339→            <div>
+   340→              <div className="flex items-start gap-3 mb-3">
+   341→                <div className="flex-1">
+   342→                  <h1 className="text-2xl font-bold text-slate-900 leading-tight">{product.title}</h1>
+   343→                  <div className="flex flex-wrap items-center gap-2 mt-2">
+   344→                    <Badge variant="secondary" className="text-xs bg-slate-100 text-slate-700">
+   345→                      {product.category.name}
+   346→                    </Badge>
+   347→                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${conditionColors[product.condition] || 'bg-slate-100 text-slate-600'}`}>
+   348→                      {conditionLabels[product.condition] || product.condition}
+   349→                    </span>
+   350→                    {product.brand && (
+   351→                      <span className="text-xs text-slate-500">{product.brand}{product.model ? ` · ${product.model}` : ''}</span>
+   352→                    )}
+   353→                  </div>
+   354→                </div>
+   355→                <button
+   356→                  onClick={() => user && favMutation.mutate()}
+   357→                  className="p-2 rounded-full border border-slate-200 hover:bg-red-50 transition-colors"
+   358→                  aria-label="Toggle favorite"
+   359→                >
+   360→                  <Heart className={`h-5 w-5 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-slate-400'}`} />
+   361→                </button>
+   362→              </div>
+   363→
+   364→              {/* Rating */}
+   365→              <div className="flex items-center gap-2">
+   366→                <div className="flex items-center gap-1">
+   367→                  {Array.from({ length: 5 }, (_, i) => (
+   368→                    <Star
+   369→                      key={i}
+   370→                      className={`h-4 w-4 ${
+   371→                        i < Math.round(product.avgRating)
+   372→                          ? 'fill-amber-400 text-amber-400'
+   373→                          : 'fill-slate-200 text-slate-200'
+   374→                      }`}
+   375→                    />
+   376→                  ))}
+   377→                </div>
+   378→                <span className="text-sm font-medium text-slate-700">
+   379→                  {product.avgRating > 0 ? product.avgRating.toFixed(1) : 'No ratings yet'}
+   380→                </span>
+   381→                <span className="text-sm text-slate-400">
+   382→                  ({product.totalReviews} review{product.totalReviews !== 1 ? 's' : ''})
+   383→                </span>
+   384→                <span className="text-sm text-slate-400">·</span>
+   385→                <span className="text-sm text-slate-400">{product.totalRentals} rental{product.totalRentals !== 1 ? 's' : ''}</span>
+   386→              </div>
+   387→            </div>
+   388→
+   389→            <Separator />
+   390→
+   391→            {/* Price Section */}
+   392→            <div className="bg-white rounded-xl border border-slate-200 p-5">
+   393→              <div className="flex items-baseline gap-2 mb-3">
+   394→                <span className="text-3xl font-bold text-emerald-600">₹{product.dailyPrice.toLocaleString('en-IN')}</span>
+   395→                <span className="text-sm text-slate-400">/day</span>
+   396→              </div>
+   397→              {product.weeklyPrice && (
+   398→                <div className="flex items-baseline gap-2 mb-2">
+   399→                  <span className="text-lg font-semibold text-slate-700">₹{product.weeklyPrice.toLocaleString('en-IN')}</span>
+   400→                  <span className="text-sm text-slate-400">/week</span>
+   401→                  <Badge variant="secondary" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+   402→                    Save {Math.round((1 - product.weeklyPrice / (product.dailyPrice * 7)) * 100)}%
+   403→                  </Badge>
+   404→                </div>
+   405→              )}
+   406→              <div className="flex items-center gap-4 text-sm text-slate-500">
+   407→                <span>Security Deposit: <strong className="text-slate-700">₹{product.securityDeposit.toLocaleString('en-IN')}</strong></span>
+   408→                {product.deliveryAvailable && (
+   409→                  <span className="flex items-center gap-1 text-emerald-600">
+   410→                    <Truck className="h-4 w-4" />
+   411→                    Delivery ₹{product.deliveryFee.toLocaleString('en-IN')}
+   412→                  </span>
+   413→                )}
+   414→              </div>
+   415→            </div>
+   416→
+   417→            {/* Owner Info */}
+   418→            <Card className="border-slate-200">
+   419→              <CardContent className="p-4">
+   420→                <div className="flex items-center justify-between">
+   421→                  <div className="flex items-center gap-3">
+   422→                    <Avatar className="h-11 w-11">
+   423→                      <AvatarFallback className="bg-[#0f172a] text-white text-sm font-semibold">
+   424→                        {product.owner.name.charAt(0).toUpperCase()}
+   425→                      </AvatarFallback>
+   426→                    </Avatar>
+   427→                    <div>
+   428→                      <div className="flex items-center gap-1.5">
+   429→                        <span className="font-semibold text-slate-900 text-sm">{product.owner.name}</span>
+   430→                        {product.owner.isVerified && (
+   431→                          <ShieldCheck className="h-4 w-4 text-emerald-500" />
+   432→                        )}
+   433→                      </div>
+   434→                      <div className="flex items-center gap-2 text-xs text-slate-500">
+   435→                        <span className="flex items-center gap-0.5">
+   436→                          <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+   437→                          {product.owner.avgRating > 0 ? product.owner.avgRating.toFixed(1) : 'New'}
+   438→                        </span>
+   439→                        <span>·</span>
+   440→                        <span>{product.totalRentals} rentals</span>
+   441→                        <span>·</span>
+   442→                        <span>Trust: {product.owner.trustScore}%</span>
+   443→                      </div>
+   444→                    </div>
+   445→                  </div>
+   446→                  <Button
+   447→                    variant="outline"
+   448→                    size="sm"
+   449→                    onClick={handleMessage}
+   450→                    className="border-slate-200 text-slate-700 hover:bg-slate-50 gap-1.5"
+   451→                  >
+   452→                    <MessageCircle className="h-4 w-4" />
+   453→                    Message
+   454→                  </Button>
+   455→                </div>
+   456→              </CardContent>
+   457→            </Card>
+   458→
+   459→            {/* Location */}
+   460→            <div className="flex items-start gap-3 bg-white rounded-xl border border-slate-200 p-4">
+   461→              <MapPin className="h-5 w-5 text-slate-400 mt-0.5 shrink-0" />
+   462→              <div className="flex-1 min-w-0">
+   463→                <div className="text-sm font-medium text-slate-900">
+   464→                  {product.city?.name}{product.state?.name ? `, ${product.state.name}` : ''}
+   465→                </div>
+   466→                {product.pickupAddress && (
+   467→                  <p className="text-xs text-slate-500 mt-0.5">{product.pickupAddress}</p>
+   468→                )}
+   469→                <div className="flex flex-wrap gap-2 mt-2">
+   470→                  {product.deliveryAvailable && (
+   471→                    <Badge variant="secondary" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
+   472→                      <Truck className="h-3 w-3" />
+   473→                      Delivery Available
+   474→                    </Badge>
+   475→                  )}
+   476→                </div>
+   477→              </div>
+   478→            </div>
+   479→
+   480→            {/* State Mismatch Warning */}
+   481→            {stateMismatch && (
+   482→              <motion.div
+   483→                initial={{ opacity: 0, y: -10 }}
+   484→                animate={{ opacity: 1, y: 0 }}
+   485→                className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200"
+   486→              >
+   487→                <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+   488→                <div>
+   489→                  <p className="text-sm font-semibold text-amber-800">This item is not available in your state</p>
+   490→                  <p className="text-xs text-amber-600 mt-1">
+   491→                    This item is listed in {product.state?.name}. You selected {selectedState?.name} as your location. Rental is only available within your state.
+   492→                  </p>
+   493→                </div>
+   494→              </motion.div>
+   495→            )}
+   496→
+   497→            <Separator />
+   498→
+   499→            {/* Tabs: Description, Rules, Cancellation */}
+   500→            <Tabs defaultValue="description" className="w-full">
+   501→              <TabsList className="bg-slate-100 w-full h-10">
+   502→                <TabsTrigger value="description" className="text-xs sm:text-sm flex-1">Description</TabsTrigger>
+   503→                <TabsTrigger value="rules" className="text-xs sm:text-sm flex-1">Rental Rules</TabsTrigger>
+   504→                <TabsTrigger value="cancellation" className="text-xs sm:text-sm flex-1">Cancellation</TabsTrigger>
+   505→              </TabsList>
+   506→              <TabsContent value="description" className="mt-4">
+   507→                <div className="bg-white rounded-xl border border-slate-200 p-5">
+   508→                  <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
+   509→                    {product.description || 'No description provided.'}
+   510→                  </p>
+   511→                  <div className="grid grid-cols-2 gap-3 mt-4">
+   512→                    {product.brand && (
+   513→                      <div className="text-xs"><span className="text-slate-400">Brand:</span> <span className="font-medium text-slate-700">{product.brand}</span></div>
+   514→                    )}
+   515→                    {product.model && (
+   516→                      <div className="text-xs"><span className="text-slate-400">Model:</span> <span className="font-medium text-slate-700">{product.model}</span></div>
+   517→                    )}
+   518→                    {product.purchaseYear && (
+   519→                      <div className="text-xs"><span className="text-slate-400">Year:</span> <span className="font-medium text-slate-700">{product.purchaseYear}</span></div>
+   520→                    )}
+   521→                    <div className="text-xs"><span className="text-slate-400">Min Rental:</span> <span className="font-medium text-slate-700">{product.minRentalDays} day{product.minRentalDays > 1 ? 's' : ''}</span></div>
+   522→                    <div className="text-xs"><span className="text-slate-400">Max Rental:</span> <span className="font-medium text-slate-700">{product.maxRentalDays} days</span></div>
+   523→                  </div>
+   524→                </div>
+   525→              </TabsContent>
+   526→              <TabsContent value="rules" className="mt-4">
+   527→                <div className="bg-white rounded-xl border border-slate-200 p-5">
+   528→                  <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
+   529→                    {product.rentalRules || 'No specific rental rules provided by the owner.'}
+   530→                  </p>
+   531→                </div>
+   532→              </TabsContent>
+   533→              <TabsContent value="cancellation" className="mt-4">
+   534→                <div className="bg-white rounded-xl border border-slate-200 p-5">
+   535→                  <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
+   536→                    {product.cancellationPolicy || 'Standard cancellation policy applies. Please contact the owner for details.'}
+   537→                  </p>
+   538→                </div>
+   539→              </TabsContent>
+   540→            </Tabs>
+   541→
+   542→            <Separator />
+   543→
+   544→            {/* Rental Calculator */}
+   545→            <Card className="border-slate-200 shadow-sm">
+   546→              <CardHeader className="pb-3">
+   547→                <CardTitle className="text-base flex items-center gap-2">
+   548→                  <CalendarDays className="h-5 w-5 text-emerald-600" />
+   549→                  Rental Calculator
+   550→                </CardTitle>
+   551→              </CardHeader>
+   552→              <CardContent className="space-y-4">
+   553→                {/* Date Pickers */}
+   554→                <div className="grid grid-cols-2 gap-3">
+   555→                  <div className="space-y-1.5">
+   556→                    <Label className="text-xs font-medium text-slate-700">Start Date</Label>
+   557→                    <Popover open={calOpen === 'start'} onOpenChange={(o) => setCalOpen(o ? 'start' : null)}>
+   558→                      <PopoverTrigger asChild>
+   559→                        <Button
+   560→                          variant="outline"
+   561→                          className="w-full justify-start text-left font-normal h-10 border-slate-200"
+   562→                        >
+   563→                          {startDate ? format(startDate, 'dd MMM yyyy') : 'Pick a date'}
+   564→                        </Button>
+   565→                      </PopoverTrigger>
+   566→                      <PopoverContent className="w-auto p-0" align="start">
+   567→                        <Calendar
+   568→                          mode="single"
+   569→                          selected={startDate}
+   570→                          onSelect={(d) => {
+   571→                            setStartDate(d);
+   572→                            if (d && endDate && differenceInDays(endDate, d) < 0) {
+   573→                              setEndDate(undefined);
+   574→                            }
+   575→                            setCalOpen(null);
+   576→                          }}
+   577→                          disabled={{ before: today }}
+   578→                        />
+   579→                      </PopoverContent>
+   580→                    </Popover>
+   581→                  </div>
+   582→                  <div className="space-y-1.5">
+   583→                    <Label className="text-xs font-medium text-slate-700">End Date</Label>
+   584→                    <Popover open={calOpen === 'end'} onOpenChange={(o) => setCalOpen(o ? 'end' : null)}>
+   585→                      <PopoverTrigger asChild>
+   586→                        <Button
+   587→                          variant="outline"
+   588→                          className={`w-full justify-start text-left font-normal h-10 border-slate-200 ${!startDate ? 'opacity-50 cursor-not-allowed' : ''}`}
+   589→                          disabled={!startDate}
+   590→                        >
+   591→                          {endDate ? format(endDate, 'dd MMM yyyy') : 'Pick a date'}
+   592→                        </Button>
+   593→                      </PopoverTrigger>
+   594→                      <PopoverContent className="w-auto p-0" align="start">
+   595→                        <Calendar
+   596→                          mode="single"
+   597→                          selected={endDate}
+   598→                          onSelect={(d) => {
+   599→                            setEndDate(d);
+   600→                            setCalOpen(null);
+   601→                          }}
+   602→                          disabled={{ before: startDate || today }}
+   603→                        />
+   604→                      </PopoverContent>
+   605→                    </Popover>
+   606→                  </div>
+   607→                </div>
+   608→
+   609→                {/* Calculation Breakdown */}
+   610→                {startDate && endDate && rentalCalc.days > 0 && (
+   611→                  <motion.div
+   612→                    initial={{ opacity: 0, height: 0 }}
+   613→                    animate={{ opacity: 1, height: 'auto' }}
+   614→                    className="space-y-3 bg-slate-50 rounded-lg p-4"
+   615→                  >
+   616→                    <div className="flex justify-between text-sm">
+   617→                      <span className="text-slate-600">Rental Duration</span>
+   618→                      <span className="font-medium text-slate-900">{rentalCalc.days} day{rentalCalc.days > 1 ? 's' : ''}</span>
+   619→                    </div>
+   620→                    <div className="flex justify-between text-sm">
+   621→                      <span className="text-slate-600">Daily Rate</span>
+   622→                      <span className="font-medium text-slate-900">₹{rentalCalc.dailyRate.toLocaleString('en-IN')}</span>
+   623→                    </div>
+   624→                    <div className="flex justify-between text-sm">
+   625→                      <span className="text-slate-600">Rental Amount</span>
+   626→                      <span className="font-medium text-slate-900">₹{rentalCalc.rentalAmount.toLocaleString('en-IN')}</span>
+   627→                    </div>
+   628→                    <div className="flex justify-between text-sm">
+   629→                      <span className="text-slate-600">Platform Fee (10%)</span>
+   630→                      <span className="font-medium text-slate-900">₹{rentalCalc.platformFee.toLocaleString('en-IN')}</span>
+   631→                    </div>
+   632→                    <div className="flex justify-between text-sm">
+   633→                      <span className="text-slate-600">Tax (18% GST)</span>
+   634→                      <span className="font-medium text-slate-900">₹{rentalCalc.tax.toLocaleString('en-IN')}</span>
+   635→                    </div>
+   636→                    {rentalCalc.deliveryFee > 0 && (
+   637→                      <div className="flex justify-between text-sm">
+   638→                        <span className="text-slate-600">Delivery Fee</span>
+   639→                        <span className="font-medium text-slate-900">₹{rentalCalc.deliveryFee.toLocaleString('en-IN')}</span>
+   640→                      </div>
+   641→                    )}
+   642→                    <div className="flex justify-between text-sm">
+   643→                      <span className="text-slate-600">Security Deposit</span>
+   644→                      <span className="font-medium text-slate-900">₹{rentalCalc.securityDeposit.toLocaleString('en-IN')}</span>
+   645→                    </div>
+   646→                    {couponApplied && rentalCalc.discount > 0 && (
+   647→                      <div className="flex justify-between text-sm text-emerald-600">
+   648→                        <span className="font-medium">Coupon Discount</span>
+   649→                        <span className="font-medium">-₹{rentalCalc.discount.toLocaleString('en-IN')}</span>
+   650→                      </div>
+   651→                    )}
+   652→                    <Separator />
+   653→                    <div className="flex justify-between text-base font-bold">
+   654→                      <span className="text-slate-900">Total</span>
+   655→                      <span className="text-emerald-600">₹{rentalCalc.total.toLocaleString('en-IN')}</span>
+   656→                    </div>
+   657→                  </motion.div>
+   658→                )}
+   659→
+   660→                {/* Coupon Code */}
+   661→                <div className="flex gap-2">
+   662→                  <div className="relative flex-1">
+   663→                    <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+   664→                    <Input
+   665→                      placeholder="Coupon code"
+   666→                      value={couponCode}
+   667→                      onChange={(e) => { setCouponCode(e.target.value); setCouponApplied(false); setCouponDiscount(0); }}
+   668→                      className="pl-9 h-10 border-slate-200"
+   669→                      disabled={!startDate || !endDate || rentalCalc.days <= 0}
+   670→                    />
+   671→                  </div>
+   672→                  <Button
+   673→                    variant="outline"
+   674→                    onClick={handleApplyCoupon}
+   675→                    disabled={!couponCode.trim() || !startDate || !endDate || rentalCalc.days <= 0 || couponMutation.isPending}
+   676→                    className="h-10 border-slate-200"
+   677→                  >
+   678→                    {couponMutation.isPending ? 'Applying...' : 'Apply'}
+   679→                  </Button>
+   680→                </div>
+   681→                {couponApplied && (
+   682→                  <div className="flex items-center gap-1.5 text-xs text-emerald-600">
+   683→                    <CheckCircle2 className="h-3.5 w-3.5" />
+   684→                    Coupon applied! You save ₹{couponDiscount.toLocaleString('en-IN')}
+   685→                  </div>
+   686→                )}
+   687→                {couponMutation.isError && (
+   688→                  <div className="flex items-center gap-1.5 text-xs text-red-600">
+   689→                    <XCircle className="h-3.5 w-3.5" />
+   690→                    Invalid coupon code
+   691→                  </div>
+   692→                )}
+   693→
+   694→                {/* Rent Now CTA */}
+   695→                <Button
+   696→                  size="lg"
+   697→                  className={`w-full h-12 text-base font-semibold ${
+   698→                    stateMismatch || !startDate || !endDate || rentalCalc.days <= 0
+   699→                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+   700→                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+   701→                  }`}
+   702→                  onClick={handleRentNow}
+   703→                  disabled={stateMismatch || !startDate || !endDate || rentalCalc.days <= 0}
+   704→                >
+   705→                  {stateMismatch
+   706→                    ? 'Not Available in Your State'
+   707→                    : !startDate || !endDate
+   708→                      ? 'Select Dates to Rent'
+   709→                      : 'Rent Now'}
+   710→                </Button>
+   711→
+   712→                {!user && startDate && endDate && rentalCalc.days > 0 && !stateMismatch && (
+   713→                  <p className="text-xs text-center text-slate-500">
+   714→                    You&apos;ll need to sign in to complete the rental
+   715→                  </p>
+   716→                )}
+   717→              </CardContent>
+   718→            </Card>
+   719→          </motion.div>
+   720→        </div>
+   721→
+   722→        {/* Availability Calendar & Reviews - Below */}
+   723→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-10">
+   724→          {/* Availability Calendar */}
+   725→          <motion.div
+   726→            initial={{ opacity: 0, y: 20 }}
+   727→            animate={{ opacity: 1, y: 0 }}
+   728→            transition={{ duration: 0.4, delay: 0.2 }}
+   729→          >
+   730→            <Card className="border-slate-200">
+   731→              <CardHeader className="pb-3">
+   732→                <CardTitle className="text-base flex items-center gap-2">
+   733→                  <Clock className="h-5 w-5 text-emerald-600" />
+   734→                  Availability
+   735→                </CardTitle>
+   736→              </CardHeader>
+   737→              <CardContent>
+   738→                <div className="flex justify-center">
+   739→                  <Calendar
+   740→                    mode="default"
+   741→                    modifiers={{
+   742→                      unavailable: unavailableDates.map((d) => new Date(d + 'T00:00:00')),
+   743→                    }}
+   744→                    modifiersClassNames={{
+   745→                      unavailable: 'bg-red-100 text-red-600 line-through opacity-60',
+   746→                    }}
+   747→                    disabled={[{ before: today }]}
+   748→                    className="rounded-md border"
+   749→                  />
+   750→                </div>
+   751→                <div className="flex items-center gap-4 mt-4 text-xs text-slate-500">
+   752→                  <div className="flex items-center gap-1.5">
+   753→                    <div className="w-3 h-3 rounded bg-emerald-200 border border-emerald-300" />
+   754→                    <span>Available</span>
+   755→                  </div>
+   756→                  <div className="flex items-center gap-1.5">
+   757→                    <div className="w-3 h-3 rounded bg-red-100 border border-red-200" />
+   758→                    <span>Unavailable</span>
+   759→                  </div>
+   760→                </div>
+   761→              </CardContent>
+   762→            </Card>
+   763→          </motion.div>
+   764→
+   765→          {/* Reviews Section */}
+   766→          <motion.div
+   767→            initial={{ opacity: 0, y: 20 }}
+   768→            animate={{ opacity: 1, y: 0 }}
+   769→            transition={{ duration: 0.4, delay: 0.3 }}
+   770→          >
+   771→            <Card className="border-slate-200">
+   772→              <CardHeader className="pb-3">
+   773→                <CardTitle className="text-base flex items-center gap-2">
+   774→                  <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
+   775→                  Reviews ({reviewsTotal})
+   776→                </CardTitle>
+   777→              </CardHeader>
+   778→              <CardContent className="space-y-5">
+   779→                {/* Star Breakdown */}
+   780→                <div className="flex items-start gap-4">
+   781→                  <div className="text-center">
+   782→                    <div className="text-3xl font-bold text-slate-900">
+   783→                      {product.avgRating > 0 ? product.avgRating.toFixed(1) : '—'}
+   784→                    </div>
+   785→                    <div className="flex items-center gap-0.5 mt-1">
+   786→                      {Array.from({ length: 5 }, (_, i) => (
+   787→                        <Star
+   788→                          key={i}
+   789→                          className={`h-3.5 w-3.5 ${
+   790→                            i < Math.round(product.avgRating) ? 'fill-amber-400 text-amber-400' : 'fill-slate-200 text-slate-200'
+   791→                          }`}
+   792→                        />
+   793→                      ))}
+   794→                    </div>
+   795→                    <p className="text-xs text-slate-400 mt-1">{reviewsTotal} review{reviewsTotal !== 1 ? 's' : ''}</p>
+   796→                  </div>
+   797→                  <div className="flex-1 space-y-1.5">
+   798→                    {[5, 4, 3, 2, 1].map((star) => {
+   799→                      const count = starBreakdown[star - 1];
+   800→                      const pct = reviews.length > 0 ? (count / reviews.length) * 100 : 0;
+   801→                      return (
+   802→                        <div key={star} className="flex items-center gap-2 text-xs">
+   803→                          <span className="w-3 text-right text-slate-600">{star}</span>
+   804→                          <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+   805→                          <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+   806→                            <div
+   807→                              className="h-full bg-amber-400 rounded-full transition-all duration-500"
+   808→                              style={{ width: `${pct}%` }}
+   809→                            />
+   810→                          </div>
+   811→                          <span className="w-6 text-right text-slate-400">{count}</span>
+   812→                        </div>
+   813→                      );
+   814→                    })}
+   815→                  </div>
+   816→                </div>
+   817→
+   818→                <Separator />
+   819→
+   820→                {/* Review List */}
+   821→                <div className="space-y-4 max-h-80 overflow-y-auto pr-1">
+   822→                  {reviews.length === 0 ? (
+   823→                    <p className="text-sm text-slate-400 text-center py-6">No reviews yet. Be the first to review this item!</p>
+   824→                  ) : (
+   825→                    reviews.map((review) => (
+   826→                      <div key={review.id} className="pb-4 border-b border-slate-100 last:border-0 last:pb-0">
+   827→                        <div className="flex items-center gap-2.5 mb-2">
+   828→                          <Avatar className="h-8 w-8">
+   829→                            <AvatarFallback className="bg-slate-100 text-slate-600 text-xs font-semibold">
+   830→                              {review.reviewer.name.charAt(0).toUpperCase()}
+   831→                            </AvatarFallback>
+   832→                          </Avatar>
+   833→                          <div className="flex-1 min-w-0">
+   834→                            <div className="flex items-center gap-2">
+   835→                              <span className="text-sm font-medium text-slate-900 truncate">{review.reviewer.name}</span>
+   836→                              <span className="text-xs text-slate-400">
+   837→                                {format(new Date(review.createdAt), 'dd MMM yyyy')}
+   838→                              </span>
+   839→                            </div>
+   840→                            <div className="flex items-center gap-0.5">
+   841→                              {Array.from({ length: 5 }, (_, i) => (
+   842→                                <Star
+   843→                                  key={i}
+   844→                                  className={`h-3 w-3 ${
+   845→                                    i < review.rating ? 'fill-amber-400 text-amber-400' : 'fill-slate-200 text-slate-200'
+   846→                                  }`}
+   847→                                />
+   848→                              ))}
+   849→                            </div>
+   850→                          </div>
+   851→                        </div>
+   852→                        {review.comment && (
+   853→                          <p className="text-sm text-slate-600 leading-relaxed ml-10">{review.comment}</p>
+   854→                        )}
+   855→                      </div>
+   856→                    ))
+   857→                  )}
+   858→                </div>
+   859→              </CardContent>
+   860→            </Card>
+   861→          </motion.div>
+   862→        </div>
+   863→      </div>
+   864→    </div>
+   865→  );
+   866→}
+   867→

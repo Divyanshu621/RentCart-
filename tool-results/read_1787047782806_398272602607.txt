@@ -1,0 +1,687 @@
+    50→    50→});
+    51→    51→
+    52→    52→type LoginFormData = z.infer<typeof loginSchema>;
+    53→    53→type RegisterFormData = z.infer<typeof registerSchema>;
+    54→    54→
+    55→    55→// ─── AuthModal Component ────────────────────────────────────
+    56→    56→export default function AuthModal() {
+    57→    57→  const {
+    58→    58→    authModalOpen,
+    59→    59→    setAuthModalOpen,
+    60→    60→    authModalView,
+    61→    61→    setAuthModalView,
+    62→    62→    setUser,
+    63→    63→    navigate,
+    64→    64→    returnUrl,
+    65→    65→    setReturnUrl,
+    66→    66→  } = useAppStore();
+    67→    67→
+    68→    68→  const [showPassword, setShowPassword] = useState(false);
+    69→    69→  const [states, setStates] = useState<State[]>([]);
+    70→    70→  const [loadingStates, setLoadingStates] = useState(true);
+    71→    71→
+    72→    72→  // Fetch states on mount
+    73→    73→  useEffect(() => {
+    74→    74→    api.getStates()
+    75→    75→      .then((data) => {
+    76→    76→        const parsed = data as unknown as State[];
+    77→    77→        setStates(parsed.filter((s) => s.isActive));
+    78→    78→      })
+    79→    79→      .catch(() => {
+    80→    80→        toast.error('Failed to load states');
+    81→    81→      })
+    82→    82→      .finally(() => setLoadingStates(false));
+    83→    83→  }, []);
+    84→    84→
+    85→    85→  const handleClose = useCallback(() => {
+    86→    86→    setAuthModalOpen(false);
+    87→    87→  }, [setAuthModalOpen]);
+    88→    88→
+    89→    89→  const toggleView = useCallback(() => {
+    90→    90→    setAuthModalView(authModalView === 'login' ? 'register' : 'login');
+    91→    91→  }, [authModalView, setAuthModalView]);
+    92→    92→
+    93→    93→  const handleAuthSuccess = useCallback(async (userData: Record<string, unknown>) => {
+    94→    94→    try {
+    95→    95→      const meData = await api.me();
+    96→    96→      setUser(meData as unknown as UserType);
+    97→    97→    } catch {
+    98→    98→      setUser(userData as unknown as UserType);
+    99→    99→    }
+   100→   100→    toast.success(authModalView === 'login' ? 'Welcome back!' : 'Account created successfully!');
+   101→   101→    setAuthModalOpen(false);
+   102→   102→    setReturnUrl(null);
+   103→   103→    navigate(returnUrl ? (returnUrl as 'marketplace' | 'dashboard') : 'marketplace');
+   104→   104→  }, [authModalView, returnUrl, navigate, setAuthModalOpen, setReturnUrl, setUser]);
+   105→   105→
+   106→   106→  return (
+   107→   107→    <Dialog open={authModalOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
+   108→   108→      <DialogContent className="sm:max-w-md p-0 overflow-hidden gap-0" showCloseButton={false}>
+   109→   109→        {/* Header bar */}
+   110→   110→        <div className="bg-[#0f172a] px-6 py-4 flex items-center justify-between">
+   111→   111→          <div className="flex items-center gap-2">
+   112→   112→            <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center">
+   113→   113→              <Sparkles className="w-4 h-4 text-white" />
+   114→   114→            </div>
+   115→   115→            <span className="text-white font-bold text-lg">RentLoop</span>
+   116→   116→          </div>
+   117→   117→          <div className="flex items-center gap-1 bg-white/10 rounded-lg p-0.5">
+   118→   118→            <button
+   119→   119→              onClick={() => setAuthModalView('login')}
+   120→   120→              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+   121→   121→                authModalView === 'login'
+   122→   122→                  ? 'bg-white text-[#0f172a] shadow-sm'
+   123→   123→                  : 'text-white/70 hover:text-white'
+   124→   124→              }`}
+   125→   125→            >
+   126→   126→              Login
+   127→   127→            </button>
+   128→   128→            <button
+   129→   129→              onClick={() => setAuthModalView('register')}
+   130→   130→              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+   131→   131→                authModalView === 'register'
+   132→   132→                  ? 'bg-white text-[#0f172a] shadow-sm'
+   133→   133→                  : 'text-white/70 hover:text-white'
+   134→   134→              }`}
+   135→   135→            >
+   136→   136→              Sign Up
+   137→   137→            </button>
+   138→   138→          </div>
+   139→   139→        </div>
+   140→   140→
+   141→   141→        <div className="p-6">
+   142→   142→          {authModalView === 'login' ? (
+   143→   143→            <LoginForm
+   144→   144→              onSuccess={handleAuthSuccess}
+   145→   145→              onToggleView={toggleView}
+   146→   146→              showPassword={showPassword}
+   147→   147→              onTogglePassword={() => setShowPassword(!showPassword)}
+   148→   148→            />
+   149→   149→          ) : (
+   150→   150→            <RegisterForm
+   151→   151→              onSuccess={handleAuthSuccess}
+   152→   152→              onToggleView={toggleView}
+   153→   153→              showPassword={showPassword}
+   154→   154→              onTogglePassword={() => setShowPassword(!showPassword)}
+   155→   155→              states={states}
+   156→   156→              loadingStates={loadingStates}
+   157→   157→            />
+   158→   158→          )}
+   159→   159→        </div>
+   160→   160→      </DialogContent>
+   161→   161→    </Dialog>
+   162→   162→  );
+   163→   163→}
+   164→   164→
+   165→   165→// ─── Login Form ─────────────────────────────────────────────
+   166→   166→function LoginForm({
+   167→   167→  onSuccess,
+   168→   168→  onToggleView,
+   169→   169→  showPassword,
+   170→   170→  onTogglePassword,
+   171→   171→}: {
+   172→   172→  onSuccess: (data: Record<string, unknown>) => void;
+   173→   173→  onToggleView: () => void;
+   174→   174→  showPassword: boolean;
+   175→   175→  onTogglePassword: () => void;
+   176→   176→}) {
+   177→   177→  const {
+   178→   178→    register,
+   179→   179→    handleSubmit,
+   180→   180→    formState: { errors, isSubmitting },
+   181→   181→    setError,
+   182→   182→  } = useForm<LoginFormData>({
+   183→   183→    resolver: zodResolver(loginSchema),
+   184→   184→  });
+   185→   185→
+   186→   186→  const [serverError, setServerError] = useState('');
+   187→   187→  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+   188→   188→  const [showGoogleDialog, setShowGoogleDialog] = useState(false);
+   189→   189→  const [googleEmail, setGoogleEmail] = useState('');
+   190→   190→  const [googleName, setGoogleName] = useState('');
+   191→   191→
+   192→   192→  const handleGoogleLogin = async () => {
+   193→   193→    if (!googleEmail.trim() || !googleEmail.includes('@')) {
+   194→   194→      toast.error('Please enter a valid email address');
+   195→   195→      return;
+   196→   196→    }
+   197→   197→    setIsGoogleLoading(true);
+   198→   198→    try {
+   199→   199→      const name = googleName.trim() || googleEmail.split('@')[0];
+   200→   200→      const result = await api.googleAuth({ email: googleEmail.trim(), name });
+   201→   201→      setShowGoogleDialog(false);
+   202→   202→      onSuccess(result.user);
+   203→   203→    } catch (err) {
+   204→   204→      const message = err instanceof Error ? err.message : 'Google sign-in failed';
+   205→   205→      toast.error(message);
+   206→   206→    } finally {
+   207→   207→      setIsGoogleLoading(false);
+   208→   208→    }
+   209→   209→  };
+   210→   210→
+   211→   211→  const onSubmit = async (data: LoginFormData) => {
+   212→   212→    setServerError('');
+   213→   213→    try {
+   214→   214→      const res = await api.login({ email: data.email, password: data.password });
+   215→   215→      onSuccess(res.user);
+   216→   216→    } catch (err) {
+   217→   217→      const message = err instanceof Error ? err.message : 'Login failed';
+   218→   218→      setServerError(message);
+   219→   219→      toast.error(message);
+   220→   220→    }
+   221→   221→  };
+   222→   222→
+   223→   223→  return (
+   224→   224→    <div>
+   225→   225→      <DialogHeader className="mb-6 text-left">
+   226→   226→        <DialogTitle className="text-xl font-bold text-[#0f172a]">
+   227→   227→        </DialogTitle>
+   228→   228→        <DialogDescription className="text-muted-foreground">
+   229→   229→        </DialogDescription>
+   230→   230→      </DialogHeader>
+   231→   231→
+   232→   232→      <h2 className="text-xl font-bold text-[#0f172a] mb-1">Welcome back</h2>
+   233→   233→      <p className="text-sm text-muted-foreground mb-6">
+   234→   234→        Sign in to your RentLoop account
+   235→   235→      </p>
+   236→   236→
+   237→   237→      {serverError && (
+   238→   238→        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+   239→   239→          {serverError}
+   240→   240→        </div>
+   241→   241→      )}
+   242→   242→
+   243→   243→      {/* Google sign-in divider + button */}
+   244→   244→      <div className="relative my-4">
+   245→   245→        <div className="absolute inset-0 flex items-center">
+   246→   246→          <div className="w-full border-t border-slate-200" />
+   247→   247→        </div>
+   248→   248→        <div className="relative flex justify-center text-xs">
+   249→   249→          <span className="px-3 bg-white text-muted-foreground uppercase tracking-wider">
+   250→   250→            or
+   251→   251→          </span>
+   252→   252→        </div>
+   253→   253→      </div>
+   254→   254→
+   255→   255→      <Button
+   256→   256→        type="button"
+   257→   257→        variant="outline"
+   258→   258→        onClick={() => { setGoogleEmail(''); setGoogleName(''); setShowGoogleDialog(true); }}
+   259→   259→        className="w-full h-11 border-slate-200 hover:bg-slate-50 font-medium text-sm"
+   260→   260→      >
+   261→   261→        <svg className="w-5 h-5" viewBox="0 0 24 24">
+   262→   262→          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+   263→   263→          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+   264→   264→          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+   265→   265→          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+   266→   266→        </svg>
+   267→   267→        Continue with Google
+   268→   268→      </Button>
+   269→   269→
+   270→   270→      {/* Google email dialog */}
+   271→   271→      {showGoogleDialog && (
+   272→   272→        <div className="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center p-4" onClick={() => !isGoogleLoading && setShowGoogleDialog(false)}>
+   273→   273→          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+   274→   274→            <div className="flex items-center justify-between mb-5">
+   275→   275→              <div className="flex items-center gap-3">
+   276→   276→                <svg className="w-7 h-7" viewBox="0 0 24 24">
+   277→   277→                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+   278→   278→                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+   279→   279→                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+   280→   280→                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+   281→   281→                </svg>
+   282→   282→                <div>
+   283→   283→                  <h3 className="font-bold text-[#0f172a]">Sign in with Google</h3>
+   284→   284→                  <p className="text-xs text-muted-foreground">Enter your Gmail to continue</p>
+   285→   285→                </div>
+   286→   286→              </div>
+   287→   287→              <button onClick={() => setShowGoogleDialog(false)} disabled={isGoogleLoading} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+   288→   288→                <X className="w-4 h-4" />
+   289→   289→              </button>
+   290→   290→            </div>
+   291→   291→            <div className="space-y-4">
+   292→   292→              <div className="space-y-1.5">
+   293→   293→                <Label className="text-sm font-medium text-[#0f172a]">Gmail Address</Label>
+   294→   294→                <Input type="email" placeholder="you@gmail.com" value={googleEmail} onChange={(e) => setGoogleEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleGoogleLogin()} disabled={isGoogleLoading} className="h-11" autoFocus />
+   295→   295→              </div>
+   296→   296→              <div className="space-y-1.5">
+   297→   297→                <Label className="text-sm font-medium text-[#0f172a]">Display Name <span className="text-muted-foreground font-normal">(optional)</span></Label>
+   298→   298→                <Input type="text" placeholder="Your name" value={googleName} onChange={(e) => setGoogleName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleGoogleLogin()} disabled={isGoogleLoading} className="h-11" />
+   299→   299→              </div>
+   300→   300→              <Button onClick={handleGoogleLogin} disabled={isGoogleLoading || !googleEmail.trim()} className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-medium">
+   301→   301→                {isGoogleLoading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Signing in...</>) : (<>Continue <ArrowRight className="w-4 h-4" /></>)}
+   302→   302→              </Button>
+   303→   303→            </div>
+   304→   304→          </div>
+   305→   305→        </div>
+   306→   306→      )}
+   307→   307→
+   308→   308→      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+   309→   309→        <div className="space-y-2">
+   310→   310→          <Label htmlFor="login-email" className="text-sm font-medium text-[#0f172a]">
+   311→   311→            Email
+   312→   312→          </Label>
+   313→   313→          <div className="relative">
+   314→   314→            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   315→   315→            <Input
+   316→   316→              id="login-email"
+   317→   317→              type="email"
+   318→   318→              placeholder="you@example.com"
+   319→   319→              className="pl-10 h-11"
+   320→   320→              {...register('email')}
+   321→   321→            />
+   322→   322→          </div>
+   323→   323→          {errors.email && (
+   324→   324→            <p className="text-sm text-red-500">{errors.email.message}</p>
+   325→   325→          )}
+   326→   326→        </div>
+   327→   327→
+   328→   328→        <div className="space-y-2">
+   329→   329→          <div className="flex items-center justify-between">
+   330→   330→            <Label htmlFor="login-password" className="text-sm font-medium text-[#0f172a]">
+   331→   331→              Password
+   332→   332→            </Label>
+   333→   333→            <button
+   334→   334→              type="button"
+   335→   335→              onClick={() => toast.info('Password reset link sent to your email!')}
+   336→   336→              className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+   337→   337→            >
+   338→   338→              Forgot Password?
+   339→   339→            </button>
+   340→   340→          </div>
+   341→   341→          <div className="relative">
+   342→   342→            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   343→   343→            <Input
+   344→   344→              id="login-password"
+   345→   345→              type={showPassword ? 'text' : 'password'}
+   346→   346→              placeholder="Enter your password"
+   347→   347→              className="pl-10 pr-10 h-11"
+   348→   348→              {...register('password')}
+   349→   349→            />
+   350→   350→            <button
+   351→   351→              type="button"
+   352→   352→              onClick={onTogglePassword}
+   353→   353→              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-[#0f172a] transition-colors"
+   354→   354→            >
+   355→   355→              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+   356→   356→            </button>
+   357→   357→          </div>
+   358→   358→          {errors.password && (
+   359→   359→            <p className="text-sm text-red-500">{errors.password.message}</p>
+   360→   360→          )}
+   361→   361→        </div>
+   362→   362→
+   363→   363→        <Button
+   364→   364→          type="submit"
+   365→   365→          disabled={isSubmitting}
+   366→   366→          className="w-full h-11 bg-[#0f172a] hover:bg-[#0f172a]/90 text-white font-medium"
+   367→   367→        >
+   368→   368→          {isSubmitting ? (
+   369→   369→            <>
+   370→   370→              <Loader2 className="w-4 h-4 animate-spin" />
+   371→   371→              Signing in...
+   372→   372→            </>
+   373→   373→          ) : (
+   374→   374→            <>
+   375→   375→              Login
+   376→   376→              <ArrowRight className="w-4 h-4" />
+   377→   377→            </>
+   378→   378→          )}
+   379→   379→        </Button>
+   380→   380→      </form>
+   381→   381→
+   382→   382→      <p className="mt-6 text-center text-sm text-muted-foreground">
+   383→   383→        Don&apos;t have an account?{' '}
+   384→   384→        <button
+   385→   385→          onClick={onToggleView}
+   386→   386→          className="text-emerald-600 hover:text-emerald-700 font-semibold"
+   387→   387→        >
+   388→   388→          Sign Up
+   389→   389→        </button>
+   390→   390→      </p>
+   391→   391→    </div>
+   392→   392→  );
+   393→   393→}
+   394→   394→
+   395→   395→// ─── Register Form ──────────────────────────────────────────
+   396→   396→function RegisterForm({
+   397→   397→  onSuccess,
+   398→   398→  onToggleView,
+   399→   399→  showPassword,
+   400→   400→  onTogglePassword,
+   401→   401→  states,
+   402→   402→  loadingStates,
+   403→   403→}: {
+   404→   404→  onSuccess: (data: Record<string, unknown>) => void;
+   405→   405→  onToggleView: () => void;
+   406→   406→  showPassword: boolean;
+   407→   407→  onTogglePassword: () => void;
+   408→   408→  states: State[];
+   409→   409→  loadingStates: boolean;
+   410→   410→}) {
+   411→   411→  const [serverError, setServerError] = useState('');
+   412→   412→
+   413→   413→  const {
+   414→   414→    register,
+   415→   415→    handleSubmit,
+   416→   416→    control,
+   417→   417→    watch,
+   418→   418→    setValue,
+   419→   419→    formState: { errors, isSubmitting },
+   420→   420→  } = useForm<RegisterFormData>({
+   421→   421→    resolver: zodResolver(registerSchema),
+   422→   422→    defaultValues: {
+   423→   423→      name: '',
+   424→   424→      email: '',
+   425→   425→      phone: '',
+   426→   426→      password: '',
+   427→   427→      stateId: '',
+   428→   428→      cityId: '',
+   429→   429→      pinCode: '',
+   430→   430→      address: '',
+   431→   431→      agreeTerms: false as unknown as true,
+   432→   432→    },
+   433→   433→  });
+   434→   434→
+   435→   435→  const selectedStateId = watch('stateId');
+   436→   436→  const selectedState = states.find((s) => s.id === selectedStateId);
+   437→   437→  const cities = selectedState?.cities?.filter((c) => c.isActive) || [];
+   438→   438→
+   439→   439→  // Reset city when state changes
+   440→   440→  useEffect(() => {
+   441→   441→    setValue('cityId', '');
+   442→   442→  }, [selectedStateId, setValue]);
+   443→   443→
+   444→   444→  const onSubmit = async (data: RegisterFormData) => {
+   445→   445→    setServerError('');
+   446→   446→    try {
+   447→   447→      const res = await api.register({
+   448→   448→        name: data.name,
+   449→   449→        email: data.email,
+   450→   450→        phone: data.phone || undefined,
+   451→   451→        password: data.password,
+   452→   452→        stateId: data.stateId,
+   453→   453→        cityId: data.cityId,
+   454→   454→        pinCode: data.pinCode || undefined,
+   455→   455→        address: data.address || undefined,
+   456→   456→      });
+   457→   457→      onSuccess(res.user);
+   458→   458→    } catch (err) {
+   459→   459→      const message = err instanceof Error ? err.message : 'Registration failed';
+   460→   460→      setServerError(message);
+   461→   461→      toast.error(message);
+   462→   462→    }
+   463→   463→  };
+   464→   464→
+   465→   465→  return (
+   466→   466→    <div>
+   467→   467→      <h2 className="text-xl font-bold text-[#0f172a] mb-1">Create your account</h2>
+   468→   468→      <p className="text-sm text-muted-foreground mb-5">
+   469→   469→        Join RentLoop and start renting today
+   470→   470→      </p>
+   471→   471→
+   472→   472→      {serverError && (
+   473→   473→        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+   474→   474→          {serverError}
+   475→   475→        </div>
+   476→   476→      )}
+   477→   477→
+   478→   478→      <form onSubmit={handleSubmit(onSubmit)} className="space-y-3.5 max-h-[55vh] overflow-y-auto pr-1 custom-scrollbar">
+   479→   479→        {/* Full Name */}
+   480→   480→        <div className="space-y-1.5">
+   481→   481→          <Label htmlFor="reg-name" className="text-sm font-medium text-[#0f172a]">
+   482→   482→            Full Name <span className="text-red-500">*</span>
+   483→   483→          </Label>
+   484→   484→          <div className="relative">
+   485→   485→            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   486→   486→            <Input
+   487→   487→              id="reg-name"
+   488→   488→              placeholder="John Doe"
+   489→   489→              className="pl-10 h-10"
+   490→   490→              {...register('name')}
+   491→   491→            />
+   492→   492→          </div>
+   493→   493→          {errors.name && (
+   494→   494→            <p className="text-xs text-red-500">{errors.name.message}</p>
+   495→   495→          )}
+   496→   496→        </div>
+   497→   497→
+   498→   498→        {/* Email */}
+   499→   499→        <div className="space-y-1.5">
+   500→   500→          <Label htmlFor="reg-email" className="text-sm font-medium text-[#0f172a]">
+   501→   501→            Email <span className="text-red-500">*</span>
+   502→   502→          </Label>
+   503→   503→          <div className="relative">
+   504→   504→            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   505→   505→            <Input
+   506→   506→              id="reg-email"
+   507→   507→              type="email"
+   508→   508→              placeholder="you@example.com"
+   509→   509→              className="pl-10 h-10"
+   510→   510→              {...register('email')}
+   511→   511→            />
+   512→   512→          </div>
+   513→   513→          {errors.email && (
+   514→   514→            <p className="text-xs text-red-500">{errors.email.message}</p>
+   515→   515→          )}
+   516→   516→        </div>
+   517→   517→
+   518→   518→        {/* Phone */}
+   519→   519→        <div className="space-y-1.5">
+   520→   520→          <Label htmlFor="reg-phone" className="text-sm font-medium text-[#0f172a]">
+   521→   521→            Phone Number
+   522→   522→          </Label>
+   523→   523→          <div className="relative">
+   524→   524→            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   525→   525→            <Input
+   526→   526→              id="reg-phone"
+   527→   527→              type="tel"
+   528→   528→              placeholder="+91 98765 43210"
+   529→   529→              className="pl-10 h-10"
+   530→   530→              {...register('phone')}
+   531→   531→            />
+   532→   532→          </div>
+   533→   533→          {errors.phone && (
+   534→   534→            <p className="text-xs text-red-500">{errors.phone.message}</p>
+   535→   535→          )}
+   536→   536→        </div>
+   537→   537→
+   538→   538→        {/* Password */}
+   539→   539→        <div className="space-y-1.5">
+   540→   540→          <Label htmlFor="reg-password" className="text-sm font-medium text-[#0f172a]">
+   541→   541→            Password <span className="text-red-500">*</span>
+   542→   542→          </Label>
+   543→   543→          <div className="relative">
+   544→   544→            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   545→   545→            <Input
+   546→   546→              id="reg-password"
+   547→   547→              type={showPassword ? 'text' : 'password'}
+   548→   548→              placeholder="Min. 6 characters"
+   549→   549→              className="pl-10 pr-10 h-10"
+   550→   550→              {...register('password')}
+   551→   551→            />
+   552→   552→            <button
+   553→   553→              type="button"
+   554→   554→              onClick={onTogglePassword}
+   555→   555→              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-[#0f172a] transition-colors"
+   556→   556→            >
+   557→   557→              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+   558→   558→            </button>
+   559→   559→          </div>
+   560→   560→          {errors.password && (
+   561→   561→            <p className="text-xs text-red-500">{errors.password.message}</p>
+   562→   562→          )}
+   563→   563→        </div>
+   564→   564→
+   565→   565→        {/* State & City row */}
+   566→   566→        <div className="grid grid-cols-2 gap-3">
+   567→   567→          {/* State */}
+   568→   568→          <div className="space-y-1.5">
+   569→   569→            <Label className="text-sm font-medium text-[#0f172a]">
+   570→   570→              State <span className="text-red-500">*</span>
+   571→   571→            </Label>
+   572→   572→            <Controller
+   573→   573→              name="stateId"
+   574→   574→              control={control}
+   575→   575→              render={({ field }) => (
+   576→   576→                <Select
+   577→   577→                  value={field.value}
+   578→   578→                  onValueChange={field.onChange}
+   579→   579→                  disabled={loadingStates}
+   580→   580→                >
+   581→   581→                  <SelectTrigger className="w-full h-10">
+   582→   582→                    <div className="flex items-center gap-1.5">
+   583→   583→                      <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+   584→   584→                      <SelectValue placeholder={loadingStates ? 'Loading...' : 'Select state'} />
+   585→   585→                    </div>
+   586→   586→                  </SelectTrigger>
+   587→   587→                  <SelectContent>
+   588→   588→                    {states.map((state) => (
+   589→   589→                      <SelectItem key={state.id} value={state.id}>
+   590→   590→                        {state.name}
+   591→   591→                      </SelectItem>
+   592→   592→                    ))}
+   593→   593→                  </SelectContent>
+   594→   594→                </Select>
+   595→   595→              )}
+   596→   596→            />
+   597→   597→            {errors.stateId && (
+   598→   598→              <p className="text-xs text-red-500">{errors.stateId.message}</p>
+   599→   599→            )}
+   600→   600→          </div>
+   601→   601→
+   602→   602→          {/* City */}
+   603→   603→          <div className="space-y-1.5">
+   604→   604→            <Label className="text-sm font-medium text-[#0f172a]">
+   605→   605→              City <span className="text-red-500">*</span>
+   606→   606→            </Label>
+   607→   607→            <Controller
+   608→   608→              name="cityId"
+   609→   609→              control={control}
+   610→   610→              render={({ field }) => (
+   611→   611→                <Select
+   612→   612→                  value={field.value}
+   613→   613→                  onValueChange={field.onChange}
+   614→   614→                  disabled={!selectedStateId}
+   615→   615→                >
+   616→   616→                  <SelectTrigger className="w-full h-10">
+   617→   617→                    <div className="flex items-center gap-1.5">
+   618→   618→                      <Home className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+   619→   619→                      <SelectValue placeholder={cities.length === 0 ? 'Select state first' : 'Select city'} />
+   620→   620→                    </div>
+   621→   621→                  </SelectTrigger>
+   622→   622→                  <SelectContent>
+   623→   623→                    {cities.map((city) => (
+   624→   624→                      <SelectItem key={city.id} value={city.id}>
+   625→   625→                        {city.name}
+   626→   626→                      </SelectItem>
+   627→   627→                    ))}
+   628→   628→                  </SelectContent>
+   629→   629→                </Select>
+   630→   630→              )}
+   631→   631→            />
+   632→   632→            {errors.cityId && (
+   633→   633→              <p className="text-xs text-red-500">{errors.cityId.message}</p>
+   634→   634→            )}
+   635→   635→          </div>
+   636→   636→        </div>
+   637→   637→
+   638→   638→        {/* PIN Code & Address row */}
+   639→   639→        <div className="grid grid-cols-2 gap-3">
+   640→   640→          <div className="space-y-1.5">
+   641→   641→            <Label htmlFor="reg-pin" className="text-sm font-medium text-[#0f172a]">
+   642→   642→              PIN Code
+   643→   643→            </Label>
+   644→   644→            <Input
+   645→   645→              id="reg-pin"
+   646→   646→              placeholder="400001"
+   647→   647→              className="h-10"
+   648→   648→              {...register('pinCode')}
+   649→   649→            />
+   650→   650→            {errors.pinCode && (
+   651→   651→              <p className="text-xs text-red-500">{errors.pinCode.message}</p>
+   652→   652→            )}
+   653→   653→          </div>
+   654→   654→
+   655→   655→          <div className="space-y-1.5">
+   656→   656→            <Label htmlFor="reg-address" className="text-sm font-medium text-[#0f172a]">
+   657→   657→              Address
+   658→   658→            </Label>
+   659→   659→            <Textarea
+   660→   660→              id="reg-address"
+   661→   661→              placeholder="Your address"
+   662→   662→              className="h-10 resize-none"
+   663→   663→              {...register('address')}
+   664→   664→            />
+   665→   665→            {errors.address && (
+   666→   666→              <p className="text-xs text-red-500">{errors.address.message}</p>
+   667→   667→            )}
+   668→   668→          </div>
+   669→   669→        </div>
+   670→   670→
+   671→   671→        {/* Terms checkbox */}
+   672→   672→        <div className="flex items-start gap-2.5 pt-1">
+   673→   673→          <Controller
+   674→   674→            name="agreeTerms"
+   675→   675→            control={control}
+   676→   676→            render={({ field }) => (
+   677→   677→              <Checkbox
+   678→   678→                checked={field.value as boolean}
+   679→   679→                onCheckedChange={(checked) => field.onChange(checked === true)}
+   680→   680→                className="mt-0.5 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+   681→   681→              />
+   682→   682→            )}
+   683→   683→          />
+   684→   684→          <label
+   685→   685→            htmlFor="agree-terms"
+   686→   686→            className="text-xs text-muted-foreground leading-relaxed cursor-pointer"
+   687→   687→            onClick={(e) => {
+   688→   688→              const cb = e.currentTarget.previousElementSibling as HTMLButtonElement;
+   689→   689→              cb?.click();
+   690→   690→            }}
+   691→   691→          >
+   692→   692→            I agree to the{' '}
+   693→   693→            <span className="text-emerald-600 font-medium hover:underline cursor-pointer">Terms of Service</span>
+   694→   694→            {', '}
+   695→   695→            <span className="text-emerald-600 font-medium hover:underline cursor-pointer">Privacy Policy</span>
+   696→   696→            {' '}and{' '}
+   697→   697→            <span className="text-emerald-600 font-medium hover:underline cursor-pointer">Rental Agreement</span>
+   698→   698→          </label>
+   699→   699→        </div>
+   700→   700→        {errors.agreeTerms && (
+   701→   701→          <p className="text-xs text-red-500">{errors.agreeTerms.message}</p>
+   702→   702→        )}
+   703→   703→
+   704→   704→        {/* Submit */}
+   705→   705→        <Button
+   706→   706→          type="submit"
+   707→   707→          disabled={isSubmitting}
+   708→   708→          className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-medium mt-2"
+   709→   709→        >
+   710→   710→          {isSubmitting ? (
+   711→   711→            <>
+   712→   712→              <Loader2 className="w-4 h-4 animate-spin" />
+   713→   713→              Creating Account...
+   714→   714→            </>
+   715→   715→          ) : (
+   716→   716→            <>
+   717→   717→              Create Account
+   718→   718→              <ArrowRight className="w-4 h-4" />
+   719→   719→            </>
+   720→   720→          )}
+   721→   721→        </Button>
+   722→   722→      </form>
+   723→   723→
+   724→   724→      <p className="mt-4 text-center text-sm text-muted-foreground">
+   725→   725→        Already have an account?{' '}
+   726→   726→        <button
+   727→   727→          onClick={onToggleView}
+   728→   728→          className="text-emerald-600 hover:text-emerald-700 font-semibold"
+   729→   729→        >
+   730→   730→          Login
+   731→   731→        </button>
+   732→   732→      </p>
+   733→   733→    </div>
+   734→   734→  );
+   735→   735→}
+   736→   736→

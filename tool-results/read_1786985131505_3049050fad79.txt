@@ -1,0 +1,577 @@
+    23→    { name: 'Uttar Pradesh', code: 'UP' },
+    24→  ]
+    25→  const states: Record<string, any> = {}\n  for (const s of statesData) {
+    26→    states[s.code] = await db.state.create({ data: s })
+    27→  }
+    28→
+    29→  // ─── 2. Cities ───────────────────────────────────────────
+    30→  console.log('→ Creating cities...')
+    31→  const citiesData: Record<string, string[]> = {
+    32→    DL: ['New Delhi', 'Dwarka', 'Rohini'],
+    33→    MH: ['Mumbai', 'Pune', 'Nagpur'],
+    34→    KA: ['Bangalore', 'Mysore', 'Mangalore'],
+    35→    TN: ['Chennai', 'Coimbatore', 'Madurai'],
+    36→    GJ: ['Ahmedabad', 'Surat', 'Vadodara'],
+    37→    RJ: ['Jaipur', 'Udaipur', 'Jodhpur'],
+    38→    KL: ['Kochi', 'Thiruvananthapuram', 'Kozhikode'],
+    39→    WB: ['Kolkata', 'Howrah', 'Durgapur'],
+    40→    TS: ['Hyderabad', 'Warangal', 'Nizamabad'],
+    41→    UP: ['Lucknow', 'Noida', 'Agra'],
+    42→  }
+    43→  const cities: Record<string, any> = {}
+    44→  for (const [stateCode, cityNames] of Object.entries(citiesData)) {
+    45→    for (const cityName of cityNames) {
+    46→      const key = `${stateCode}-${cityName}`
+    47→      cities[key] = await db.city.create({
+    48→        data: { name: cityName, stateId: states[stateCode].id },
+    49→      })
+    50→    }
+    51→  }
+    52→
+    53→  // ─── 3. Categories ────────────────────────────────────────
+    54→  console.log('→ Creating categories...')
+    55→  const categoriesData = [
+    56→    { name: 'Electronics', slug: 'electronics', icon: 'cpu', description: 'Electronic devices and gadgets' },
+    57→    { name: 'Cameras', slug: 'cameras', icon: 'camera', description: 'Photography and videography equipment' },
+    58→    { name: 'Laptops', slug: 'laptops', icon: 'laptop', description: 'Laptops and notebooks' },
+    59→    { name: 'Gaming', slug: 'gaming', icon: 'gamepad-2', description: 'Gaming consoles and accessories' },
+    60→    { name: 'Furniture', slug: 'furniture', icon: 'armchair', description: 'Home and office furniture' },
+    61→    { name: 'Tools', slug: 'tools', icon: 'wrench', description: 'Power tools and hand tools' },
+    62→    { name: 'Vehicles', slug: 'vehicles', icon: 'car', description: 'Vehicles for rent' },
+    63→    { name: 'Bikes', slug: 'bikes', icon: 'bike', description: 'Bicycles and motorbikes' },
+    64→    { name: 'Sports', slug: 'sports', icon: 'dumbbell', description: 'Sports and fitness equipment' },
+    65→    { name: 'Camping', slug: 'camping', icon: 'tent', description: 'Camping and outdoor gear' },
+    66→    { name: 'Party Equipment', slug: 'party-equipment', icon: 'music', description: 'Party and event equipment' },
+    67→    { name: 'Home Appliances', slug: 'home-appliances', icon: 'home', description: 'Home appliances' },
+    68→    { name: 'Books', slug: 'books', icon: 'book-open', description: 'Books and reading material' },
+    69→    { name: 'Fashion', slug: 'fashion', icon: 'shirt', description: 'Fashion and accessories' },
+    70→    { name: 'Musical Instruments', slug: 'musical-instruments', icon: 'guitar', description: 'Musical instruments and audio gear' },
+    71→  ]
+    72→  const categories: Record<string, any> = {}
+    73→  for (const c of categoriesData) {
+    74→    categories[c.slug] = await db.category.create({ data: c })
+    75→  }
+    76→
+    77→  // ─── 4. Users ─────────────────────────────────────────────
+    78→  console.log('→ Creating users...')
+    79→  const passwordHash = await hash('password123', 10)
+    80→
+    81→  const usersData = [
+    82→    { name: 'Admin User', email: 'admin@rentloop.com', phone: '9876543210', role: 'SUPER_ADMIN', stateCode: 'DL', cityKey: 'DL-New Delhi' },
+    83→    { name: 'Admin Two', email: 'admin2@rentloop.com', phone: '9876543211', role: 'ADMIN', stateCode: 'MH', cityKey: 'MH-Mumbai' },
+    84→    { name: 'Rahul Sharma', email: 'owner1@rentloop.com', phone: '9876543212', role: 'OWNER', stateCode: 'DL', cityKey: 'DL-New Delhi' },
+    85→    { name: 'Priya Patel', email: 'owner2@rentloop.com', phone: '9876543213', role: 'OWNER', stateCode: 'MH', cityKey: 'MH-Pune' },
+    86→    { name: 'Vikram Reddy', email: 'owner3@rentloop.com', phone: '9876543214', role: 'OWNER', stateCode: 'KA', cityKey: 'KA-Bangalore' },
+    87→    { name: 'Amit Kumar', email: 'customer1@rentloop.com', phone: '9876543215', role: 'CUSTOMER', stateCode: 'DL', cityKey: 'DL-New Delhi' },
+    88→    { name: 'Sneha Iyer', email: 'customer2@rentloop.com', phone: '9876543216', role: 'CUSTOMER', stateCode: 'MH', cityKey: 'MH-Mumbai' },
+    89→    { name: 'Rohan Das', email: 'customer3@rentloop.com', phone: '9876543217', role: 'CUSTOMER', stateCode: 'KA', cityKey: 'KA-Bangalore' },
+    90→    { name: 'Meera Nair', email: 'customer4@rentloop.com', phone: '9876543218', role: 'CUSTOMER', stateCode: 'TN', cityKey: 'TN-Chennai' },
+    91→    { name: 'Arjun Singh', email: 'customer5@rentloop.com', phone: '9876543219', role: 'CUSTOMER', stateCode: 'RJ', cityKey: 'RJ-Jaipur' },
+    92→  ]
+    93→  const users: any[] = []
+    94→  for (const u of usersData) {
+    95→    const user = await db.user.create({
+    96→      data: {
+    97→        name: u.name,
+    98→        email: u.email,
+    99→        phone: u.phone,
+   100→        passwordHash,
+   101→        role: u.role,
+   102→        stateId: states[u.stateCode].id,
+   103→        cityId: cities[u.cityKey].id,
+   104→        isVerified: true,
+   105→        isActive: true,
+   106→      },
+   107→    })
+   108→    users.push(user)
+   109→  }
+   110→
+   111→  // Shorthand references
+   112→  const admin = users[0]
+   113→  const admin2 = users[1]
+   114→  const owner1 = users[2] // Rahul - Delhi
+   115→  const owner2 = users[3] // Priya - Maharashtra
+   116→  const owner3 = users[4] // Vikram - Karnataka
+   117→  const cust1 = users[5]  // Amit - Delhi
+   118→  const cust2 = users[6]  // Sneha - Maharashtra
+   119→  const cust3 = users[7]  // Rohan - Karnataka
+   120→  const cust4 = users[8]  // Meera - Tamil Nadu
+   121→  const cust5 = users[9]  // Arjun - Rajasthan
+   122→
+   123→  // ─── 5. Products ──────────────────────────────────────────
+   124→  console.log('→ Creating products...')
+   125→  const productsData = [
+   126→    {
+   127→      title: 'Canon EOS R10 Camera', slug: 'canon-eos-r10',
+   128→      description: 'Canon EOS R10 mirrorless camera with 18-45mm lens kit. Perfect for photography enthusiasts and content creators. 24.2MP APS-C sensor with fast autofocus.',
+   129→      categorySlug: 'cameras', condition: 'LIKE_NEW', dailyPrice: 800, securityDeposit: 15000,
+   130→      owner: owner1, stateCode: 'DL', cityKey: 'DL-New Delhi', brand: 'Canon', model: 'EOS R10', purchaseYear: 2023,
+   131→    },
+   132→    {
+   133→      title: 'Sony PlayStation 5', slug: 'sony-playstation-5',
+   134→      description: 'PS5 console with DualSense controller and 2 games included. Next-gen gaming experience with 4K support and ultra-fast SSD.',
+   135→      categorySlug: 'gaming', condition: 'GOOD', dailyPrice: 500, securityDeposit: 20000,
+   136→      owner: owner2, stateCode: 'MH', cityKey: 'MH-Mumbai', brand: 'Sony', model: 'PS5', purchaseYear: 2022,
+   137→    },
+   138→    {
+   139→      title: 'MacBook Pro M3', slug: 'macbook-pro-m3',
+   140→      description: 'Apple MacBook Pro 14-inch with M3 chip, 16GB RAM, 512GB SSD. Ideal for video editing, coding, and creative work.',
+   141→      categorySlug: 'laptops', condition: 'LIKE_NEW', dailyPrice: 1500, securityDeposit: 50000,
+   142→      owner: owner3, stateCode: 'KA', cityKey: 'KA-Bangalore', brand: 'Apple', model: 'MacBook Pro M3', purchaseYear: 2024,
+   143→    },
+   144→    {
+   145→      title: 'Mountain Bike', slug: 'mountain-bike',
+   146→      description: 'Premium mountain bike with 21-speed gear system, front suspension, and durable alloy frame. Great for trails and city rides.',
+   147→      categorySlug: 'bikes', condition: 'GOOD', dailyPrice: 300, securityDeposit: 5000,
+   148→      owner: owner1, stateCode: 'DL', cityKey: 'DL-Dwarka', brand: 'Hero', model: 'Xtreme', purchaseYear: 2023,
+   149→    },
+   150→    {
+   151→      title: 'Camping Tent Set', slug: 'camping-tent-set',
+   152→      description: '4-person waterproof camping tent with accessories including sleeping bags, ground mat, and LED lantern. Perfect for outdoor adventures.',
+   153→      categorySlug: 'camping', condition: 'NEW', dailyPrice: 400, securityDeposit: 3000,
+   154→      owner: owner1, stateCode: 'RJ', cityKey: 'RJ-Jaipur', brand: 'Decathlon', model: '2 Seconds Easy', purchaseYear: 2024,
+   155→    },
+   156→    {
+   157→      title: 'DJI Drone', slug: 'dji-drone',
+   158→      description: 'DJI Mavic Air 2 drone with 4K camera, 3-axis gimbal, and 34-min flight time. Includes extra batteries and carrying case.',
+   159→      categorySlug: 'cameras', condition: 'LIKE_NEW', dailyPrice: 2000, securityDeposit: 30000,
+   160→      owner: owner3, stateCode: 'KA', cityKey: 'KA-Bangalore', brand: 'DJI', model: 'Mavic Air 2', purchaseYear: 2023,
+   161→    },
+   162→    {
+   163→      title: 'Projector Epson', slug: 'projector-epson',
+   164→      description: 'Epson EB-X51 projector with 3LCD technology, 3600 lumens, and HD resolution. Great for movies, presentations, and events.',
+   165→      categorySlug: 'electronics', condition: 'GOOD', dailyPrice: 600, securityDeposit: 10000,
+   166→      owner: owner3, stateCode: 'TN', cityKey: 'TN-Chennai', brand: 'Epson', model: 'EB-X51', purchaseYear: 2022,
+   167→    },
+   168→    {
+   169→      title: 'Power Drill Set', slug: 'power-drill-set',
+   170→      description: 'Bosch professional power drill set with 50 accessories including drill bits, screwdriver bits, and carrying case. Cordless with 2 batteries.',
+   171→      categorySlug: 'tools', condition: 'GOOD', dailyPrice: 250, securityDeposit: 3000,
+   172→      owner: owner1, stateCode: 'DL', cityKey: 'DL-Rohini', brand: 'Bosch', model: 'GSB 18V-28', purchaseYear: 2023,
+   173→    },
+   174→    {
+   175→      title: 'Electric Guitar', slug: 'electric-guitar',
+   176→      description: 'Fender Squier Stratocaster electric guitar with amplifier and accessories. Perfect for beginners and intermediate players.',
+   177→      categorySlug: 'musical-instruments', condition: 'LIKE_NEW', dailyPrice: 350, securityDeposit: 5000,
+   178→      owner: owner2, stateCode: 'MH', cityKey: 'MH-Mumbai', brand: 'Fender', model: 'Squier Strat', purchaseYear: 2023,
+   179→    },
+   180→    {
+   181→      title: 'DSLR Nikon D850', slug: 'dslr-nikon-d850',
+   182→      description: 'Nikon D850 full-frame DSLR with 45.7MP sensor and 24-70mm f/2.8 lens. Professional-grade camera for weddings and events.',
+   183→      categorySlug: 'cameras', condition: 'GOOD', dailyPrice: 1500, securityDeposit: 40000,
+   184→      owner: owner1, stateCode: 'DL', cityKey: 'DL-New Delhi', brand: 'Nikon', model: 'D850', purchaseYear: 2021,
+   185→    },
+   186→    {
+   187→      title: 'Gaming Laptop ASUS ROG', slug: 'gaming-laptop-asus-rog',
+   188→      description: 'ASUS ROG Strix G16 gaming laptop with RTX 4060, Intel i7-13650HX, 16GB RAM. Ultimate gaming and streaming machine.',
+   189→      categorySlug: 'laptops', condition: 'LIKE_NEW', dailyPrice: 1200, securityDeposit: 35000,
+   190→      owner: owner3, stateCode: 'KA', cityKey: 'KA-Bangalore', brand: 'ASUS', model: 'ROG Strix G16', purchaseYear: 2024,
+   191→    },
+   192→    {
+   193→      title: 'Office Chair', slug: 'office-chair',
+   194→      description: 'Ergonomic office chair with lumbar support, adjustable armrests, and breathable mesh back. Ideal for long working hours.',
+   195→      categorySlug: 'furniture', condition: 'GOOD', dailyPrice: 100, securityDeposit: 2000,
+   196→      owner: owner2, stateCode: 'MH', cityKey: 'MH-Pune', brand: 'Featherlite', model: 'Ergo Pro', purchaseYear: 2022,
+   197→    },
+   198→    {
+   199→      title: 'Camping Stove', slug: 'camping-stove',
+   200→      description: 'Portable gas camping stove with 2 burners, auto-ignition, and wind shield. Comes with gas cylinder and carry bag.',
+   201→      categorySlug: 'camping', condition: 'NEW', dailyPrice: 150, securityDeposit: 1000,
+   202→      owner: owner2, stateCode: 'RJ', cityKey: 'RJ-Udaipur', brand: 'Coleman', model: ' Triton Series', purchaseYear: 2024,
+   203→    },
+   204→    {
+   205→      title: 'Bicycle', slug: 'bicycle',
+   206→      description: 'Hybrid city bicycle with 7-speed gears, comfortable saddle, and front basket. Perfect for daily commute and leisure rides.',
+   207→      categorySlug: 'bikes', condition: 'GOOD', dailyPrice: 100, securityDeposit: 2000,
+   208→      owner: owner1, stateCode: 'DL', cityKey: 'DL-Dwarka', brand: 'Hercules', model: 'Roadeo', purchaseYear: 2023,
+   209→    },
+   210→    {
+   211→      title: 'GoPro Hero 12', slug: 'gopro-hero-12',
+   212→      description: 'GoPro Hero 12 Black action camera with 5.3K video, HyperSmooth 6.0 stabilization, and waterproof design. Includes mounts and accessories.',
+   213→      categorySlug: 'cameras', condition: 'LIKE_NEW', dailyPrice: 500, securityDeposit: 8000,
+   214→      owner: owner3, stateCode: 'KA', cityKey: 'KA-Mysore', brand: 'GoPro', model: 'Hero 12 Black', purchaseYear: 2024,
+   215→    },
+   216→    {
+   217→      title: 'Bluetooth Speaker JBL', slug: 'bluetooth-speaker-jbl',
+   218→      description: 'JBL PartyBox 310 portable Bluetooth speaker with powerful bass, light effects, and 18-hour battery life. Great for parties and outdoor events.',
+   219→      categorySlug: 'electronics', condition: 'GOOD', dailyPrice: 400, securityDeposit: 4000,
+   220→      owner: owner2, stateCode: 'TN', cityKey: 'TN-Coimbatore', brand: 'JBL', model: 'PartyBox 310', purchaseYear: 2023,
+   221→    },
+   222→    {
+   223→      title: 'Treadmill', slug: 'treadmill',
+   224→      description: 'Motorized treadmill with 3HP motor, incline up to 15%, speed up to 14km/h. Foldable design with heart rate monitor and built-in speakers.',
+   225→      categorySlug: 'sports', condition: 'GOOD', dailyPrice: 300, securityDeposit: 5000,
+   226→      owner: owner2, stateCode: 'MH', cityKey: 'MH-Mumbai', brand: 'PowerMax', model: 'TDA-250', purchaseYear: 2023,
+   227→    },
+   228→    {
+   229→      title: 'Telescope', slug: 'telescope',
+   230→      description: 'Celestron AstroMaster 130EQ telescope with equatorial mount. Perfect for stargazing and celestial observation. Includes 2 eyepieces.',
+   231→      categorySlug: 'electronics', condition: 'LIKE_NEW', dailyPrice: 350, securityDeposit: 6000,
+   232→      owner: owner1, stateCode: 'DL', cityKey: 'DL-New Delhi', brand: 'Celestron', model: 'AstroMaster 130EQ', purchaseYear: 2023,
+   233→    },
+   234→    {
+   235→      title: 'VR Headset Meta Quest', slug: 'vr-headset-meta-quest',
+   236→      description: 'Meta Quest 3 VR headset with 128GB storage, mixed reality passthrough, and Touch Plus controllers. Includes carrying case.',
+   237→      categorySlug: 'electronics', condition: 'NEW', dailyPrice: 450, securityDeposit: 15000,
+   238→      owner: owner3, stateCode: 'KA', cityKey: 'KA-Bangalore', brand: 'Meta', model: 'Quest 3', purchaseYear: 2024,
+   239→    },
+   240→    {
+   241→      title: 'Folding Table', slug: 'folding-table',
+   242→      description: '6-foot folding table, heavy-duty steel frame with waterproof top. Ideal for events, exhibitions, and temporary setups.',
+   243→      categorySlug: 'furniture', condition: 'GOOD', dailyPrice: 80, securityDeposit: 1000,
+   244→      owner: owner2, stateCode: 'MH', cityKey: 'MH-Nagpur', brand: 'National', model: '6ft Folding', purchaseYear: 2022,
+   245→    },
+   246→    {
+   247→      title: 'Ring Light', slug: 'ring-light',
+   248→      description: '18-inch ring light with tripod stand, phone holder, and remote control. Adjustable color temperature and brightness. Perfect for content creators.',
+   249→      categorySlug: 'electronics', condition: 'NEW', dailyPrice: 150, securityDeposit: 2000,
+   250→      owner: owner1, stateCode: 'TN', cityKey: 'TN-Chennai', brand: 'Godox', model: 'LR180C', purchaseYear: 2024,
+   251→    },
+   252→    {
+   253→      title: 'Kayak', slug: 'kayak',
+   254→      description: 'Inflatable 2-person kayak with paddles, pump, and repair kit. Durable PVC construction suitable for lakes and calm rivers.',
+   255→      categorySlug: 'sports', condition: 'GOOD', dailyPrice: 500, securityDeposit: 5000,
+   256→      owner: owner2, stateCode: 'KL', cityKey: 'KL-Kochi', brand: 'Intex', model: 'Explorer K2', purchaseYear: 2023,
+   257→    },
+   258→    {
+   259→      title: 'Badminton Set', slug: 'badminton-set',
+   260→      description: 'Professional badminton set with 4 rackets, 12 shuttlecocks, net with posts, and carrying bag. Tournament-grade quality.',
+   261→      categorySlug: 'sports', condition: 'NEW', dailyPrice: 200, securityDeposit: 1500,
+   262→      owner: owner1, stateCode: 'DL', cityKey: 'DL-Rohini', brand: 'Yonex', model: 'Astrox Pro Set', purchaseYear: 2024,
+   263→    },
+   264→    {
+   265→      title: 'Party Speaker', slug: 'party-speaker',
+   266→      description: 'JBL Boombox 3 portable party speaker with IP67 waterproof rating, 24-hour battery, and powerful JBL Pro Sound.',
+   267→      categorySlug: 'party-equipment', condition: 'LIKE_NEW', dailyPrice: 350, securityDeposit: 5000,
+   268→      owner: owner2, stateCode: 'MH', cityKey: 'MH-Mumbai', brand: 'JBL', model: 'Boombox 3', purchaseYear: 2024,
+   269→    },
+   270→    {
+   271→      title: 'Welding Machine', slug: 'welding-machine',
+   272→      description: 'ARC welding machine 200A with accessories including electrodes, helmet, gloves, and chipping hammer. Industrial grade.',
+   273→      categorySlug: 'tools', condition: 'GOOD', dailyPrice: 400, securityDeposit: 5000,
+   274→      owner: owner3, stateCode: 'GJ', cityKey: 'GJ-Ahmedabad', brand: 'Bosch', model: 'GWS 200', purchaseYear: 2022,
+   275→    },
+   276→    {
+   277→      title: 'Sewing Machine', slug: 'sewing-machine',
+   278→      description: 'Brother computerized sewing machine with 80 built-in stitches, LCD display, and extension table. Great for tailoring and crafts.',
+   279→      categorySlug: 'home-appliances', condition: 'GOOD', dailyPrice: 150, securityDeposit: 3000,
+   280→      owner: owner1, stateCode: 'WB', cityKey: 'WB-Kolkata', brand: 'Brother', model: 'CS8080', purchaseYear: 2023,
+   281→    },
+   282→    {
+   283→      title: 'Piano Keyboard', slug: 'piano-keyboard',
+   284→      description: 'Yamaha PSR-E373 61-key portable keyboard with 622 voices, 165 styles, and education suite. Includes stand and power adapter.',
+   285→      categorySlug: 'musical-instruments', condition: 'LIKE_NEW', dailyPrice: 300, securityDeposit: 5000,
+   286→      owner: owner3, stateCode: 'TS', cityKey: 'TS-Hyderabad', brand: 'Yamaha', model: 'PSR-E373', purchaseYear: 2023,
+   287→    },
+   288→    {
+   289→      title: 'Drone Mini', slug: 'drone-mini',
+   290→      description: 'DJI Mini 3 Fly More Combo with 4K/60fps camera, 38-min flight time, and GPS return-to-home. Ultra-lightweight under 249g.',
+   291→      categorySlug: 'cameras', condition: 'NEW', dailyPrice: 1000, securityDeposit: 15000,
+   292→      owner: owner1, stateCode: 'UP', cityKey: 'UP-Lucknow', brand: 'DJI', model: 'Mini 3', purchaseYear: 2024,
+   293→    },
+   294→    {
+   295→      title: 'Surfboard', slug: 'surfboard',
+   296→      description: '8-foot foam surfboard, beginner-friendly with soft deck and tri-fin setup. Includes leash and board bag.',
+   297→      categorySlug: 'sports', condition: 'GOOD', dailyPrice: 400, securityDeposit: 3000,
+   298→      owner: owner2, stateCode: 'KL', cityKey: 'KL-Kozhikode', brand: 'Wavestorm', model: '8ft Classic', purchaseYear: 2023,
+   299→    },
+   300→    {
+   301→      title: 'Film Camera', slug: 'film-camera',
+   302→      description: 'Canon AE-1 35mm film SLR camera with 50mm f/1.8 lens. Classic analog camera for film photography enthusiasts. Includes camera bag.',
+   303→      categorySlug: 'cameras', condition: 'GOOD', dailyPrice: 200, securityDeposit: 5000,
+   304→      owner: owner3, stateCode: 'TN', cityKey: 'TN-Madurai', brand: 'Canon', model: 'AE-1', purchaseYear: 1980,
+   305→    },
+   306→  ]
+   307→
+   308→  const products: any[] = []
+   309→  for (const p of productsData) {
+   310→    const product = await db.product.create({
+   311→      data: {
+   312→        ownerId: p.owner.id,
+   313→        categoryId: categories[p.categorySlug].id,
+   314→        title: p.title,
+   315→        slug: p.slug,
+   316→        description: p.description,
+   317→        condition: p.condition,
+   318→        brand: p.brand,
+   319→        model: p.model,
+   320→        purchaseYear: p.purchaseYear,
+   321→        dailyPrice: p.dailyPrice,
+   322→        securityDeposit: p.securityDeposit,
+   323→        minRentalDays: 1,
+   324→        maxRentalDays: 30,
+   325→        stateId: states[p.stateCode].id,
+   326→        cityId: cities[p.cityKey].id,
+   327→        status: 'APPROVED',
+   328→      },
+   329→    })
+   330→    products.push(product)
+   331→  }
+   332→
+   333→  // ─── 6. Rentals ───────────────────────────────────────────
+   334→  console.log('→ Creating rentals...')
+   335→
+   336→  const rentals: any[] = []
+   337→
+   338→  // Helper to create rental
+   339→  async function createRental(data: {
+   340→    customer: any, owner: any, product: any,
+   341→    startDate: Date, endDate: Date,
+   342→    status: string, actualReturnDate?: Date,
+   343→    cancellationReason?: string,
+   344→  }) {
+   345→    const rentalDays = Math.ceil((data.endDate.getTime() - data.startDate.getTime()) / 86400000)
+   346→    const dailyRate = data.product.dailyPrice
+   347→    const rentalAmount = rentalDays * dailyRate
+   348→    const securityDeposit = data.product.securityDeposit
+   349→    const platformFee = Math.round(rentalAmount * 0.1 * 100) / 100
+   350→    const tax = Math.round(rentalAmount * 0.18 * 100) / 100
+   351→    const totalAmount = rentalAmount + platformFee + tax + securityDeposit
+   352→
+   353→    const rental = await db.rental.create({
+   354→      data: {
+   355→        customerId: data.customer.id,
+   356→        ownerId: data.owner.id,
+   357→        productId: data.product.id,
+   358→        startDate: data.startDate,
+   359→        endDate: data.endDate,
+   360→        actualReturnDate: data.actualReturnDate ?? null,
+   361→        rentalDays,
+   362→        dailyRate,
+   363→        rentalAmount,
+   364→        securityDeposit,
+   365→        platformFee,
+   366→        tax,
+   367→        totalAmount,
+   368→        status: data.status,
+   369→        cancellationReason: data.cancellationReason ?? null,
+   370→      },
+   371→    })
+   372→    rentals.push(rental)
+   373→    return rental
+   374→  }
+   375→
+   376→  // 3 ACTIVE rentals
+   377→  await createRental({
+   378→    customer: cust1, owner: owner1, product: products[0], // Canon EOS R10
+   379→    startDate: daysAgo(3), endDate: daysFromNow(4), status: 'ACTIVE',
+   380→  })
+   381→  await createRental({
+   382→    customer: cust2, owner: owner2, product: products[1], // PS5
+   383→    startDate: daysAgo(2), endDate: daysFromNow(5), status: 'ACTIVE',
+   384→  })
+   385→  await createRental({
+   386→    customer: cust3, owner: owner3, product: products[2], // MacBook Pro
+   387→    startDate: daysAgo(1), endDate: daysFromNow(6), status: 'ACTIVE',
+   388→  })
+   389→
+   390→  // 4 COMPLETED rentals
+   391→  const completedR1 = await createRental({
+   392→    customer: cust4, owner: owner1, product: products[3], // Mountain Bike
+   393→    startDate: daysAgo(20), endDate: daysAgo(15), status: 'COMPLETED', actualReturnDate: daysAgo(15),
+   394→  })
+   395→  const completedR2 = await createRental({
+   396→    customer: cust5, owner: owner2, product: products[4], // Camping Tent
+   397→    startDate: daysAgo(30), endDate: daysAgo(25), status: 'COMPLETED', actualReturnDate: daysAgo(25),
+   398→  })
+   399→  const completedR3 = await createRental({
+   400→    customer: cust1, owner: owner3, product: products[5], // DJI Drone
+   401→    startDate: daysAgo(25), endDate: daysAgo(20), status: 'COMPLETED', actualReturnDate: daysAgo(20),
+   402→  })
+   403→  const completedR4 = await createRental({
+   404→    customer: cust2, owner: owner1, product: products[7], // Power Drill
+   405→    startDate: daysAgo(15), endDate: daysAgo(12), status: 'COMPLETED', actualReturnDate: daysAgo(12),
+   406→  })
+   407→
+   408→  // 2 OWNER_PENDING
+   409→  await createRental({
+   410→    customer: cust3, owner: owner2, product: products[8], // Electric Guitar
+   411→    startDate: daysFromNow(2), endDate: daysFromNow(5), status: 'OWNER_PENDING',
+   412→  })
+   413→  await createRental({
+   414→    customer: cust4, owner: owner1, product: products[17], // Telescope
+   415→    startDate: daysFromNow(3), endDate: daysFromNow(7), status: 'OWNER_PENDING',
+   416→  })
+   417→
+   418→  // 2 OWNER_ACCEPTED
+   419→  await createRental({
+   420→    customer: cust5, owner: owner3, product: products[19], // VR Headset
+   421→    startDate: daysFromNow(1), endDate: daysFromNow(4), status: 'OWNER_ACCEPTED',
+   422→  })
+   423→  await createRental({
+   424→    customer: cust1, owner: owner2, product: products[14], // GoPro
+   425→    startDate: daysFromNow(2), endDate: daysFromNow(5), status: 'OWNER_ACCEPTED',
+   426→  })
+   427→
+   428→  // 2 RETURN_PENDING
+   429→  await createRental({
+   430→    customer: cust2, owner: owner1, product: products[9], // DSLR Nikon
+   431→    startDate: daysAgo(5), endDate: daysAgo(1), status: 'RETURN_PENDING',
+   432→  })
+   433→  await createRental({
+   434→    customer: cust3, owner: owner3, product: products[11], // Gaming Laptop
+   435→    startDate: daysAgo(7), endDate: daysAgo(1), status: 'RETURN_PENDING',
+   436→  })
+   437→
+   438→  // 2 OVERDUE
+   439→  await createRental({
+   440→    customer: cust4, owner: owner1, product: products[13], // Bicycle
+   441→    startDate: daysAgo(12), endDate: daysAgo(2), status: 'OVERDUE',
+   442→  })
+   443→  await createRental({
+   444→    customer: cust5, owner: owner2, product: products[15], // JBL Speaker
+   445→    startDate: daysAgo(10), endDate: daysAgo(3), status: 'OVERDUE',
+   446→  })
+   447→
+   448→  // 2 CANCELLED
+   449→  await createRental({
+   450→    customer: cust1, owner: owner2, product: products[20], // Folding Table
+   451→    startDate: daysFromNow(5), endDate: daysFromNow(8), status: 'CANCELLED',
+   452→    cancellationReason: 'Customer changed plans',
+   453→  })
+   454→  await createRental({
+   455→    customer: cust3, owner: owner1, product: products[22], // Badminton Set
+   456→    startDate: daysFromNow(3), endDate: daysFromNow(6), status: 'CANCELLED',
+   457→    cancellationReason: 'Product unavailable on selected dates',
+   458→  })
+   459→
+   460→  // 3 PENDING_PAYMENT
+   461→  await createRental({
+   462→    customer: cust4, owner: owner3, product: products[24], // Welding Machine
+   463→    startDate: daysFromNow(2), endDate: daysFromNow(5), status: 'PENDING_PAYMENT',
+   464→  })
+   465→  await createRental({
+   466→    customer: cust5, owner: owner1, product: products[25], // Sewing Machine
+   467→    startDate: daysFromNow(1), endDate: daysFromNow(4), status: 'PENDING_PAYMENT',
+   468→  })
+   469→  await createRental({
+   470→    customer: cust1, owner: owner3, product: products[26], // Piano Keyboard
+   471→    startDate: daysFromNow(3), endDate: daysFromNow(7), status: 'PENDING_PAYMENT',
+   472→  })
+   473→
+   474→  // ─── 7. Reviews (for completed rentals) ───────────────────
+   475→  console.log('→ Creating reviews...')
+   476→  const reviewsData = [
+   477→    { rental: completedR1, reviewer: cust4, target: owner1, product: products[3], rating: 5, comment: 'Excellent mountain bike! Well maintained and great condition. Owner was very helpful with pickup and return.' },
+   478→    { rental: completedR2, reviewer: cust5, target: owner2, product: products[4], rating: 4, comment: 'Camping tent was in great condition. All accessories were included as described. Would rent again.' },
+   479→    { rental: completedR3, reviewer: cust1, target: owner3, product: products[5], rating: 5, comment: 'DJI drone was amazing! Captured some incredible footage. Owner provided a quick tutorial which was very helpful.' },
+   480→    { rental: completedR4, reviewer: cust2, target: owner1, product: products[7], rating: 4, comment: 'Power drill set was very useful for my home renovation project. All bits and accessories were included.' },
+   481→    { rental: completedR1, reviewer: owner1, target: cust4, product: products[3], rating: 5, comment: 'Great customer! Returned the bike on time and in excellent condition.' },
+   482→    { rental: completedR2, reviewer: owner2, target: cust5, product: products[4], rating: 4, comment: 'Good customer. Tent was returned clean and well-packed.' },
+   483→    { rental: completedR3, reviewer: owner3, target: cust1, product: products[5], rating: 5, comment: 'Very responsible renter. Drone returned in perfect condition with all accessories.' },
+   484→    { rental: completedR4, reviewer: owner1, target: cust2, product: products[7], rating: 4, comment: 'Polite and punctual customer. Would rent to again.' },
+   485→    { rental: completedR1, reviewer: cust4, target: owner1, product: products[3], rating: 4, comment: 'Smooth rental experience. The bike was perfect for my weekend trip to Aravalli hills.' },
+   486→    { rental: completedR2, reviewer: cust5, target: owner2, product: products[4], rating: 3, comment: 'Decent experience. Tent was good but delivery was slightly delayed.' },
+   487→    { rental: completedR3, reviewer: cust1, target: owner3, product: products[5], rating: 5, comment: 'Absolutely fantastic drone rental. The owner was super professional and responsive.' },
+   488→    { rental: completedR4, reviewer: cust2, target: owner1, product: products[7], rating: 3, comment: 'Drill set worked well. Minor issue with one battery not holding charge fully.' },
+   489→    { rental: completedR1, reviewer: cust4, target: owner1, product: products[3], rating: 5, comment: 'Best rental experience on RentLoop so far! Highly recommend this owner.' },
+   490→    { rental: completedR2, reviewer: cust5, target: owner2, product: products[4], rating: 4, comment: 'Great value for money. The tent set had everything we needed for our camping trip.' },
+   491→    { rental: completedR3, reviewer: cust1, target: owner3, product: products[5], rating: 4, comment: 'Drone was in excellent condition. Clear instructions provided by the owner.' },
+   492→  ]
+   493→
+   494→  for (const r of reviewsData) {
+   495→    await db.review.create({
+   496→      data: {
+   497→        rentalId: r.rental.id,
+   498→        reviewerId: r.reviewer.id,
+   499→        targetId: r.target.id,
+   500→        productId: r.product.id,
+   501→        rating: r.rating,
+   502→        comment: r.comment,
+   503→      },
+   504→    })
+   505→  }
+   506→
+   507→  // ─── 8. Coupons ────────────────────────────────────────────
+   508→  console.log('→ Creating coupons...')
+   509→  await db.coupon.createMany({
+   510→    data: [
+   511→      {
+   512→        code: 'SAVE10',
+   513→        type: 'PERCENTAGE',
+   514→        value: 10,
+   515→        minOrder: 500,
+   516→        maxDiscount: 2000,
+   517→        validFrom: daysAgo(30),
+   518→        validUntil: daysFromNow(60),
+   519→        usageLimit: 100,
+   520→        perUserLimit: 1,
+   521→        createdById: admin.id,
+   522→        isActive: true,
+   523→      },
+   524→      {
+   525→        code: 'FLAT100',
+   526→        type: 'FIXED',
+   527→        value: 100,
+   528→        minOrder: 300,
+   529→        validFrom: daysAgo(15),
+   530→        validUntil: daysFromNow(90),
+   531→        usageLimit: 200,
+   532→        perUserLimit: 2,
+   533→        createdById: admin.id,
+   534→        isActive: true,
+   535→      },
+   536→    ],
+   537→  })
+   538→
+   539→  // ─── 9. Notifications ─────────────────────────────────────
+   540→  console.log('→ Creating notifications...')
+   541→  await db.notification.createMany({
+   542→    data: [
+   543→      { userId: owner1.id, title: 'New Rental Request', message: 'Amit Kumar has requested to rent your Canon EOS R10 Camera.', type: 'RENTAL_REQUEST' },
+   544→      { userId: cust1.id, title: 'Rental Accepted', message: 'Your rental request for Canon EOS R10 Camera has been accepted.', type: 'RENTAL_UPDATE' },
+   545→      { userId: owner2.id, title: 'New Rental Request', message: 'Sneha Iyer has requested to rent your Sony PlayStation 5.', type: 'RENTAL_REQUEST' },
+   546→      { userId: cust2.id, title: 'Rental Started', message: 'Your rental for Sony PlayStation 5 has started. Enjoy!', type: 'RENTAL_UPDATE' },
+   547→      { userId: owner3.id, title: 'New Rental Request', message: 'Rohan Das has requested to rent your MacBook Pro M3.', type: 'RENTAL_REQUEST' },
+   548→      { userId: cust4.id, title: 'Return Reminder', message: 'Your rental for DSLR Nikon D850 is due for return tomorrow.', type: 'RETURN' },
+   549→      { userId: cust5.id, title: 'Overdue Notice', message: 'Your rental for JBL Bluetooth Speaker is overdue. Please return it as soon as possible.', type: 'OVERDUE' },
+   550→      { userId: owner1.id, title: 'Product Approved', message: 'Your product Canon EOS R10 Camera has been approved and is now live.', type: 'PRODUCT_UPDATE' },
+   551→      { userId: cust3.id, title: 'Payment Received', message: 'Payment of ₹8,160 for DJI Drone rental has been received.', type: 'PAYMENT' },
+   552→      { userId: admin.id, title: 'New Dispute Filed', message: 'A new dispute has been filed for rental #RNT001. Please review.', type: 'DISPUTE', data: '{"rentalId": "RNT001"}' },
+   553→    ],
+   554→  })
+   555→
+   556→  // ─── 10. Favorites ────────────────────────────────────────
+   557→  console.log('→ Creating favorites...')
+   558→  await db.favorite.createMany({
+   559→    data: [
+   560→      { userId: cust1.id, productId: products[0].id },  // Canon EOS R10
+   561→      { userId: cust1.id, productId: products[2].id },  // MacBook Pro
+   562→      { userId: cust1.id, productId: products[5].id },  // DJI Drone
+   563→      { userId: cust2.id, productId: products[1].id },  // PS5
+   564→      { userId: cust2.id, productId: products[8].id },  // Electric Guitar
+   565→      { userId: cust2.id, productId: products[17].id }, // Telescope
+   566→      { userId: cust3.id, productId: products[2].id },  // MacBook Pro
+   567→      { userId: cust3.id, productId: products[10].id }, // Gaming Laptop
+   568→      { userId: cust3.id, productId: products[19].id }, // VR Headset
+   569→      { userId: cust4.id, productId: products[5].id },  // DJI Drone
+   570→      { userId: cust4.id, productId: products[9].id },  // DSLR Nikon
+   571→      { userId: cust4.id, productId: products[28].id }, // Drone Mini
+   572→      { userId: cust5.id, productId: products[4].id },  // Camping Tent
+   573→      { userId: cust5.id, productId: products[3].id },  // Mountain Bike
+   574→      { userId: cust5.id, productId: products[21].id }, // Kayak
+   575→    ],
+   576→  })
+   577→
+   578→  console.log('✅ Seed completed successfully!')
+   579→  console.log(`   States: ${Object.keys(states).length}`)
+   580→  console.log(`   Cities: ${Object.keys(cities).length}`)
+   581→  console.log(`   Categories: ${Object.keys(categories).length}`)
+   582→  console.log(`   Users: ${users.length}`)
+   583→  console.log(`   Products: ${products.length}`)
+   584→  console.log(`   Rentals: ${rentals.length}`)
+   585→  console.log(`   Reviews: ${reviewsData.length}`)
+   586→  console.log(`   Coupons: 2`)
+   587→  console.log(`   Notifications: 10`)
+   588→  console.log(`   Favorites: 15`)
+   589→}
+   590→
+   591→seed()
+   592→  .catch((e) => {
+   593→    console.error('❌ Seed failed:', e)
+   594→    process.exit(1)
+   595→  })
+   596→  .finally(async () => {
+   597→    await db.$disconnect()
+   598→  })
+   599→

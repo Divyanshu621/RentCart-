@@ -1,0 +1,452 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Location Models ────────────────────────────────────────
+model State {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  code        String  @unique
+  country     String  @default("India")
+  isActive    Boolean @default(true)
+  cities      City[]
+  users       User[]
+  products    Product[]
+  createdAt   DateTime @default(now())
+}
+
+model City {
+  id          String  @id @default(cuid())
+  name        String
+  stateId     String
+  state       State   @relation(fields: [stateId], references: [id])
+  isActive    Boolean @default(true)
+  users       User[]
+  products    Product[]
+  areas       Area[]
+  createdAt   DateTime @default(now())
+
+  @@unique([name, stateId])
+}
+
+model Area {
+  id        String  @id @default(cuid())
+  name      String
+  cityId    String
+  city      City    @relation(fields: [cityId], references: [id])
+  pinCode   String?
+  isActive  Boolean @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([name, cityId])
+}
+
+// ─── Category ───────────────────────────────────────────────
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  slug        String    @unique
+  icon        String?
+  description String?
+  isActive    Boolean   @default(true)
+  products    Product[]
+  createdAt   DateTime  @default(now())
+}
+
+// ─── User ───────────────────────────────────────────────────
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  phone         String?
+  passwordHash  String
+  role          String    @default("CUSTOMER") // CUSTOMER, OWNER, ADMIN, SUPER_ADMIN
+  kycStatus     String    @default("NOT_REQUIRED") // NOT_REQUIRED, PENDING, SUBMITTED, VERIFIED, REJECTED
+  stateId       String?
+  state         State?    @relation(fields: [stateId], references: [id])
+  cityId        String?
+  city          City?     @relation(fields: [cityId], references: [id])
+  pinCode       String?
+  address       String?
+  avatarUrl     String?
+  bio           String?
+  isVerified    Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  trustScore    Int       @default(50)
+  responseRate  Float     @default(0)
+  totalRentals  Int       @default(0)
+  totalReviews  Int       @default(0)
+  avgRating     Float     @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  emailVerified     Boolean   @default(false)
+  mfaEnabled        Boolean   @default(false)
+  mfaSecret         String?
+  lastLoginAt       DateTime?
+
+  ownedProducts      Product[]
+  sentRentals        Rental[]  @relation("CustomerRentals")
+  receivedRentals    Rental[]  @relation("OwnerRentals")
+  sentMessages       Message[]
+  conversations1     Conversation[] @relation("ConvUser1")
+  conversations2     Conversation[] @relation("ConvUser2")
+  reviews            Review[]
+  receivedReviews    Review[]   @relation("ReceivedReviews")
+  favorites          Favorite[]
+  notifications      Notification[]
+  disputes           Dispute[]
+  couponsCreated     Coupon[]
+  couponUsages       CouponUsage[]
+  auditLogs          AuditLog[]
+  sellerKyc          SellerKyc?
+  sessions               Session[]
+  passwordResetTokens     PasswordResetToken[]
+}
+
+// ─── Product ────────────────────────────────────────────────
+model Product {
+  id                  String    @id @default(cuid())
+  ownerId             String
+  owner               User      @relation(fields: [ownerId], references: [id])
+  categoryId          String
+  category            Category  @relation(fields: [categoryId], references: [id])
+  title               String
+  slug                String
+  description         String?
+  condition           String    @default("GOOD") // NEW, LIKE_NEW, GOOD, FAIR, DAMAGED
+  brand               String?
+  model               String?
+  purchaseYear        Int?
+  dailyPrice          Float
+  weeklyPrice         Float?
+  securityDeposit     Float     @default(0)
+  minRentalDays       Int       @default(1)
+  maxRentalDays       Int       @default(30)
+  stateId             String?
+  state               State?    @relation(fields: [stateId], references: [id])
+  cityId              String?
+  city                City?     @relation(fields: [cityId], references: [id])
+  pickupAddress       String?
+  latitude            Float?
+  longitude           Float?
+  deliveryAvailable   Boolean   @default(false)
+  deliveryFee         Float     @default(0)
+  deliveryRadius      Int       @default(10)
+  status              String    @default("DRAFT") // DRAFT, PENDING_REVIEW, APPROVED, REJECTED, SUSPENDED
+  rentalRules         String?
+  cancellationPolicy  String?
+  ownerNotes          String?
+  totalRentals        Int       @default(0)
+  avgRating           Float     @default(0)
+  totalReviews        Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  images              ProductImage[]
+  rentals             Rental[]
+  reviews             Review[]
+  favorites           Favorite[]
+
+  @@unique([slug])
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  altText   String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+// ─── Rental ─────────────────────────────────────────────────
+model Rental {
+  id                String    @id @default(cuid())
+  customerId        String
+  customer          User      @relation("CustomerRentals", fields: [customerId], references: [id])
+  ownerId           String
+  owner             User      @relation("OwnerRentals", fields: [ownerId], references: [id])
+  productId         String
+  product           Product   @relation(fields: [productId], references: [id])
+  startDate         DateTime
+  endDate           DateTime
+  actualReturnDate  DateTime?
+  rentalDays        Int
+  dailyRate         Float
+  rentalAmount      Float
+  securityDeposit   Float     @default(0)
+  platformFee       Float     @default(0)
+  deliveryFee       Float     @default(0)
+  tax               Float     @default(0)
+  discount          Float     @default(0)
+  totalAmount       Float
+  status            String    @default("PENDING_PAYMENT")
+  cancellationReason String?
+  lateFeePerDay     Float     @default(50)
+  totalLateFee      Float     @default(0)
+  inspectionResult  String?   // GOOD, MINOR_DAMAGE, MAJOR_DAMAGE, LOST
+  inspectionNotes   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  reviews           Review[]
+  payments          Payment[]
+  refunds           Refund[]
+  disputes          Dispute[]
+  extensionRequests ExtensionRequest[]
+}
+
+// ─── Payment ────────────────────────────────────────────────
+model Payment {
+  id              String   @id @default(cuid())
+  rentalId        String
+  rental          Rental   @relation(fields: [rentalId], references: [id])
+  amount          Float
+  type            String   // RENTAL, DEPOSIT, EXTENSION, REFUND, LATE_FEE
+  status          String   @default("PENDING") // PENDING, COMPLETED, FAILED, REFUNDED
+  paymentMethod   String   @default("SIMULATED")
+  transactionId   String?
+  razorpayOrderId String?
+  createdAt       DateTime @default(now())
+}
+
+// ─── Refund ─────────────────────────────────────────────────
+model Refund {
+  id              String   @id @default(cuid())
+  rentalId        String
+  rental          Rental   @relation(fields: [rentalId], references: [id])
+  amount          Float
+  reason          String?
+  status          String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  createdAt       DateTime @default(now())
+}
+
+// ─── Review ─────────────────────────────────────────────────
+model Review {
+  id          String   @id @default(cuid())
+  rentalId    String
+  rental      Rental   @relation(fields: [rentalId], references: [id])
+  reviewerId  String
+  reviewer    User     @relation(fields: [reviewerId], references: [id])
+  targetId    String
+  target      User     @relation("ReceivedReviews", fields: [targetId], references: [id])
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  rating      Int      // 1-5
+  comment     String?
+  createdAt   DateTime @default(now())
+}
+
+// ─── Favorite ───────────────────────────────────────────────
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+}
+
+// ─── Conversation & Message ─────────────────────────────────
+model Conversation {
+  id            String    @id @default(cuid())
+  user1Id       String
+  user1         User      @relation("ConvUser1", fields: [user1Id], references: [id])
+  user2Id       String
+  user2         User      @relation("ConvUser2", fields: [user2Id], references: [id])
+  productId     String?
+  lastMessage   String?
+  lastMessageAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  messages      Message[]
+
+  @@unique([user1Id, user2Id, productId])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User     @relation(fields: [senderId], references: [id])
+  content        String
+  type           String   @default("TEXT") // TEXT, IMAGE, FILE
+  isRead         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+}
+
+// ─── Notification ───────────────────────────────────────────
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   // RENTAL_REQUEST, PAYMENT, RETURN, etc.
+ isRead    Boolean  @default(false)
+  data      String?  // JSON string for extra data
+  createdAt DateTime @default(now())
+}
+
+// ─── Dispute ────────────────────────────────────────────────
+model Dispute {
+  id          String   @id @default(cuid())
+  rentalId    String
+  rental      Rental   @relation(fields: [rentalId], references: [id])
+  raisedById  String
+  raisedBy    User     @relation(fields: [raisedById], references: [id])
+  againstId   String
+  reason      String
+  description String
+  status      String   @default("OPEN") // OPEN, UNDER_REVIEW, CUSTOMER_RESPONSE, OWNER_RESPONSE, RESOLVED, REJECTED
+  resolution  String?
+  adminNotes  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── Extension Request ──────────────────────────────────────
+model ExtensionRequest {
+  id            String   @id @default(cuid())
+  rentalId      String
+  rental        Rental   @relation(fields: [rentalId], references: [id])
+  requestedDays Int
+  newEndDate    DateTime
+  additionalFee Float
+  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  reason        String?
+  createdAt     DateTime @default(now())
+}
+
+// ─── Coupon ─────────────────────────────────────────────────
+model Coupon {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  type            String   @default("PERCENTAGE") // PERCENTAGE, FIXED
+  value           Float
+  minOrder        Float    @default(0)
+  maxDiscount     Float?
+  validFrom       DateTime @default(now())
+  validUntil      DateTime?
+  usageLimit      Int?
+  perUserLimit    Int      @default(1)
+  applicableCategories String? // comma-separated category IDs
+  applicableStates String? // comma-separated state IDs
+  createdById     String?
+  createdBy       User?    @relation(fields: [createdById], references: [id])
+  isActive        Boolean  @default(true)
+  timesUsed       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  usages          CouponUsage[]
+}
+
+model CouponUsage {
+  id        String   @id @default(cuid())
+  couponId  String
+  coupon    Coupon   @relation(fields: [couponId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  rentalId  String?
+  createdAt DateTime @default(now())
+}
+
+// ─── Seller KYC ────────────────────────────────────────────
+model SellerKyc {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Document numbers
+  aadhaarNumber   String?
+  panNumber       String?
+  gstNumber       String?
+  bankAccountNo   String?
+  bankIfsc        String?
+  bankName        String?
+  bankHolderName  String?
+  // Document file URLs (base64 or uploaded file paths)
+  aadhaarFrontUrl    String?
+  aadhaarBackUrl     String?
+  panCardUrl         String?
+  passbookUrl        String?
+  // Business info
+  businessName       String?
+  businessType       String?  // INDIVIDUAL, PROPRIETORSHIP, PARTNERSHIP, LLP, PRIVATE_LIMITED, COMPANY
+  businessAddress    String?
+  // Status
+  status           String   @default("DRAFT") // DRAFT, SUBMITTED, UNDER_REVIEW, VERIFIED, REJECTED
+  submittedAt      DateTime?
+  verifiedAt       DateTime?
+  rejectedAt       DateTime?
+  rejectionReason  String?
+  reviewedBy       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// ─── Payment Settings ──────────────────────────────────────
+model PaymentSettings {
+  id                  String   @id @default("default")
+  razorpayEnabled     Boolean  @default(true)
+  upiEnabled          Boolean  @default(false)
+  cardEnabled         Boolean  @default(false)
+  netbankingEnabled   Boolean  @default(false)
+  walletEnabled       Boolean  @default(false)
+  cashOnPickupEnabled Boolean  @default(true)
+  updatedAt           DateTime @updatedAt
+}
+
+// ─── Session ──────────────────────────────────────────────
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// ─── Login Attempt (Brute-force protection) ──────────────────
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  ipAddress String?
+  success   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// ─── Password Reset Token ──────────────────────────────────
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  used      Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// ─── Audit Log ──────────────────────────────────────────────
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+}

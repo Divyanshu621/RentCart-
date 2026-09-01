@@ -1,0 +1,617 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useCallback } from 'react';
+     4→import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+     5→import { motion, AnimatePresence } from 'framer-motion';
+     6→import { format } from 'date-fns';
+     7→import {
+     8→  ArrowLeft,
+     9→  Clock,
+    10→  CalendarRange,
+    11→  IndianRupee,
+    12→  AlertTriangle,
+    13→  CheckCircle2,
+    14→  XCircle,
+    15→  CreditCard,
+    16→  RotateCcw,
+    17→  Timer,
+    18→  Eye,
+    19→  Phone,
+    20→  Loader2,
+    21→  PackageOpen,
+    22→  ChevronRight,
+    23→  Camera,
+    24→  Laptop,
+    25→  Bike,
+    26→  Drill,
+    27→  Sofa,
+    28→  Tent,
+    29→  Gamepad2,
+    30→  Music,
+    31→  BookOpen,
+    32→  Dumbbell,
+    33→  Wrench,
+    34→  Shirt,
+    35→  Baby,
+    36→  Utensils,
+    37→  type LucideIcon,
+    38→} from 'lucide-react';
+    39→import { Card, CardContent } from '@/components/ui/card';
+    40→import PaymentCheckoutModal from '@/components/rentloop/payment/PaymentCheckoutModal';
+    41→import { Button } from '@/components/ui/button';
+    42→import { Badge } from '@/components/ui/badge';
+    43→import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    44→import { Skeleton } from '@/components/ui/skeleton';
+    45→import { useAppStore } from '@/store';
+    46→import { api } from '@/lib/api';
+    47→import type { Rental, RentalStatus } from '@/types';
+    48→import { toast } from 'sonner';
+    49→import RentalDetailDialog from './RentalDetailDialog';
+    50→import CancelRentalDialog from './CancelRentalDialog';
+    51→
+    52→// ─── Category Icons ────────────────────────────────────────
+    53→const categoryIcons: Record<string, LucideIcon> = {
+    54→  cameras: Camera, laptops: Laptop, bicycles: Bike, tools: Drill, furniture: Sofa,
+    55→  camping: Tent, gaming: Gamepad2, 'musical-instruments': Music, books: BookOpen,
+    56→  fitness: Dumbbell, 'home-improvement': Wrench, fashion: Shirt,
+    57→  'baby-equipment': Baby, 'kitchen-appliances': Utensils,
+    58→};
+    59→
+    60→// ─── Status Color Mapping ──────────────────────────────────
+    61→const statusColors: Record<RentalStatus, string> = {
+    62→  PENDING_PAYMENT: 'bg-amber-100 text-amber-700 border-amber-200',
+    63→  PAYMENT_COMPLETED: 'bg-sky-100 text-sky-700 border-sky-200',
+    64→  OWNER_PENDING: 'bg-amber-100 text-amber-700 border-amber-200',
+    65→  OWNER_ACCEPTED: 'bg-blue-100 text-blue-700 border-blue-200',
+    66→  OWNER_REJECTED: 'bg-red-100 text-red-700 border-red-200',
+    67→  READY_FOR_PICKUP: 'bg-sky-100 text-sky-700 border-sky-200',
+    68→  OUT_FOR_DELIVERY: 'bg-sky-100 text-sky-700 border-sky-200',
+    69→  ACTIVE: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    70→  RETURN_PENDING: 'bg-orange-100 text-orange-700 border-orange-200',
+    71→  RETURNED: 'bg-blue-100 text-blue-700 border-blue-200',
+    72→  INSPECTION: 'bg-sky-100 text-sky-700 border-sky-200',
+    73→  COMPLETED: 'bg-green-100 text-green-700 border-green-200',
+    74→  CANCELLED: 'bg-gray-100 text-gray-500 border-gray-200',
+    75→  DISPUTED: 'bg-red-100 text-red-700 border-red-200',
+    76→  OVERDUE: 'bg-red-100 text-red-700 border-red-200',
+    77→};
+    78→
+    79→const statusLabels: Record<RentalStatus, string> = {
+    80→  PENDING_PAYMENT: 'Pending Payment',
+    81→  PAYMENT_COMPLETED: 'Payment Done',
+    82→  OWNER_PENDING: 'Pending Approval',
+    83→  OWNER_ACCEPTED: 'Accepted',
+    84→  OWNER_REJECTED: 'Rejected',
+    85→  READY_FOR_PICKUP: 'Ready for Pickup',
+    86→  OUT_FOR_DELIVERY: 'Out for Delivery',
+    87→  ACTIVE: 'Active',
+    88→  RETURN_PENDING: 'Return Pending',
+    89→  RETURNED: 'Returned',
+    90→  INSPECTION: 'Under Inspection',
+    91→  COMPLETED: 'Completed',
+    92→  CANCELLED: 'Cancelled',
+    93→  DISPUTED: 'Disputed',
+    94→  OVERDUE: 'Overdue',
+    95→};
+    96→
+    97→// ─── Tab Mapping ───────────────────────────────────────────
+    98→type TabKey = 'all' | 'upcoming' | 'active' | 'returning' | 'completed' | 'cancelled' | 'overdue';
+    99→
+   100→const statusToTab: Record<RentalStatus, TabKey> = {
+   101→  PENDING_PAYMENT: 'upcoming',
+   102→  PAYMENT_COMPLETED: 'upcoming',
+   103→  OWNER_PENDING: 'upcoming',
+   104→  OWNER_ACCEPTED: 'upcoming',
+   105→  OWNER_REJECTED: 'cancelled',
+   106→  READY_FOR_PICKUP: 'upcoming',
+   107→  OUT_FOR_DELIVERY: 'upcoming',
+   108→  ACTIVE: 'active',
+   109→  RETURN_PENDING: 'returning',
+   110→  RETURNED: 'returning',
+   111→  INSPECTION: 'returning',
+   112→  COMPLETED: 'completed',
+   113→  CANCELLED: 'cancelled',
+   114→  DISPUTED: 'overdue',
+   115→  OVERDUE: 'overdue',
+   116→};
+   117→
+   118→// ─── Countdown Timer ───────────────────────────────────────
+   119→function CountdownTimer({ endDate }: { endDate: string }) {
+   120→  const [timeLeft, setTimeLeft] = useState('');
+   121→
+   122→  useEffect(() => {
+   123→    const update = () => {
+   124→      const diff = new Date(endDate).getTime() - Date.now();
+   125→      if (diff <= 0) {
+   126→        setTimeLeft('Overdue');
+   127→        return;
+   128→      }
+   129→      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+   130→      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+   131→      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+   132→      const secs = Math.floor((diff % (1000 * 60)) / 1000);
+   133→      if (days > 0) setTimeLeft(`${days}d ${hours}h ${mins}m`);
+   134→      else if (hours > 0) setTimeLeft(`${hours}h ${mins}m ${secs}s`);
+   135→      else setTimeLeft(`${mins}m ${secs}s`);
+   136→    };
+   137→    update();
+   138→    const id = setInterval(update, 1000);
+   139→    return () => clearInterval(id);
+   140→  }, [endDate]);
+   141→
+   142→  return (
+   143→    <span className={`text-xs font-mono font-medium ${timeLeft === 'Overdue' ? 'text-red-600' : 'text-emerald-600'}`}>
+   144→      {timeLeft}
+   145→    </span>
+   146→  );
+   147→}
+   148→
+   149→// ─── Gradient Maps ─────────────────────────────────────────
+   150→const gradientMap: Record<string, string> = {
+   151→  cameras: 'from-rose-400 to-orange-300',
+   152→  laptops: 'from-violet-500 to-purple-300',
+   153→  bicycles: 'from-emerald-400 to-teal-300',
+   154→  tools: 'from-slate-500 to-gray-400',
+   155→  furniture: 'from-amber-400 to-yellow-300',
+   156→  camping: 'from-green-500 to-emerald-300',
+   157→  gaming: 'from-indigo-500 to-blue-400',
+   158→  'musical-instruments': 'from-pink-500 to-rose-300',
+   159→  books: 'from-yellow-500 to-amber-300',
+   160→  fitness: 'from-lime-500 to-green-300',
+   161→  'home-improvement': 'from-zinc-500 to-stone-400',
+   162→  fashion: 'from-fuchsia-500 to-pink-300',
+   163→  'baby-equipment': 'from-cyan-400 to-sky-300',
+   164→  'kitchen-appliances': 'from-red-400 to-orange-300',
+   165→};
+   166→
+   167→// ─── Rental Card Skeleton ──────────────────────────────────
+   168→function RentalCardSkeleton() {
+   169→  return (
+   170→    <Card className="border-slate-200">
+   171→      <CardContent className="p-4">
+   172→        <div className="flex gap-4">
+   173→          <Skeleton className="h-20 w-20 rounded-lg shrink-0" />
+   174→          <div className="flex-1 min-w-0 space-y-2">
+   175→            <Skeleton className="h-4 w-3/4" />
+   176→            <Skeleton className="h-3 w-1/2" />
+   177→            <Skeleton className="h-3 w-1/3" />
+   178→          </div>
+   179→          <div className="flex flex-col items-end gap-2 shrink-0">
+   180→            <Skeleton className="h-5 w-20 rounded-full" />
+   181→            <Skeleton className="h-4 w-16" />
+   182→          </div>
+   183→        </div>
+   184→      </CardContent>
+   185→    </Card>
+   186→  );
+   187→}
+   188→
+   189→// ─── Rental Card ───────────────────────────────────────────
+   190→function RentalCard({
+   191→  rental,
+   192→  onSelect,
+   193→  onAction,
+   194→  isAccepting,
+   195→}: {
+   196→  rental: Rental;
+   197→  onSelect: (r: Rental) => void;
+   198→  onAction: (r: Rental, action: string) => void;
+   199→  isAccepting?: boolean;
+   200→}) {
+   201→  const user = useAppStore((s) => s.user);
+   202→  const isOwner = user?.id === rental.ownerId;
+   203→  const isCustomer = user?.id === rental.customerId;
+   204→  const categorySlug = rental.product?.category?.slug || '';
+   205→  const Icon = categoryIcons[categorySlug] || Camera;
+   206→  const gradient = gradientMap[categorySlug] || 'from-slate-400 to-gray-300';
+   207→
+   208→  const isActive = rental.status === 'ACTIVE';
+   209→  const isOverdue = rental.status === 'OVERDUE';
+   210→
+   211→  return (
+   212→    <motion.div
+   213→      initial={{ opacity: 0, y: 12 }}
+   214→      animate={{ opacity: 1, y: 0 }}
+   215→      exit={{ opacity: 0, y: -12 }}
+   216→      transition={{ duration: 0.2 }}
+   217→    >
+   218→      <Card
+   219→        className="border-slate-200 bg-white hover:shadow-md transition-shadow cursor-pointer"
+   220→        onClick={() => onSelect(rental)}
+   221→      >
+   222→        <CardContent className="p-3 sm:p-4">
+   223→          <div className="flex gap-3 sm:gap-4">
+   224→            {/* Thumbnail */}
+   225→            <div className={`h-16 w-16 sm:h-20 sm:w-20 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center shrink-0`}>
+   226→              <Icon className="h-6 w-6 sm:h-8 sm:w-8 text-white/80" strokeWidth={1.5} />
+   227→            </div>
+   228→
+   229→            {/* Info */}
+   230→            <div className="flex-1 min-w-0">
+   231→              <h3 className="font-semibold text-slate-900 text-xs sm:text-sm truncate">{rental.product.title}</h3>
+   232→              <div className="flex items-center gap-1 text-[11px] sm:text-xs text-slate-500 mt-1">
+   233→                <CalendarRange className="h-3 w-3" />
+   234→                <span>{format(new Date(rental.startDate), 'dd MMM yyyy')}</span>
+   235→                <span>→</span>
+   236→                <span>{format(new Date(rental.endDate), 'dd MMM yyyy')}</span>
+   237→              </div>
+   238→              <div className="flex items-center gap-1 text-[11px] sm:text-xs text-slate-400 mt-0.5">
+   239→                <Clock className="h-3 w-3" />
+   240→                <span>{rental.rentalDays} days</span>
+   241→              </div>
+   242→              {/* Countdown for active rentals */}
+   243→              {(isActive || isOverdue) && (
+   244→                <div className="flex items-center gap-1 mt-1">
+   245→                  <Timer className="h-3 w-3 text-slate-400" />
+   246→                  <CountdownTimer endDate={rental.endDate} />
+   247→                </div>
+   248→              )}
+   249→            </div>
+   250→
+   251→            {/* Right: Status + Amount + Actions */}
+   252→            <div className="flex flex-col items-end gap-2 shrink-0">
+   253→              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${statusColors[rental.status]}`}>
+   254→                {statusLabels[rental.status]}
+   255→              </span>
+   256→              <span className="text-sm font-bold text-slate-900">₹{rental.totalAmount.toLocaleString('en-IN')}</span>
+   257→              {/* Action buttons */}
+   258→              <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
+   259→                {rental.status === 'PENDING_PAYMENT' && isCustomer && (
+   260→                  <>
+   261→                    <Button size="sm" className="h-11 sm:h-7 px-3 sm:px-2.5 text-xs sm:text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => onAction(rental, 'pay')}>
+   262→                      <CreditCard className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />Pay Now
+   263→                    </Button>
+   264→                    <Button size="sm" variant="outline" className="h-11 sm:h-7 px-3 sm:px-2.5 text-xs sm:text-[11px] border-red-200 text-red-600 hover:bg-red-50" onClick={() => onAction(rental, 'cancel')}>
+   265→                      <XCircle className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />Cancel
+   266→                    </Button>
+   267→                  </>
+   268→                )}
+   269→                {rental.status === 'OWNER_PENDING' && (
+   270→                  <>
+   271→                    {isOwner && (
+   272→                      <>
+   273→                        <Button size="sm" variant="outline" className="h-7 px-2.5 text-[11px] border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => onAction(rental, 'accept')} disabled={isAccepting}>
+   274→                          <CheckCircle2 className="h-3 w-3 mr-1" />Accept
+   275→                        </Button>
+   276→                        <Button size="sm" variant="outline" className="h-7 px-2.5 text-[11px] border-red-200 text-red-600 hover:bg-red-50" onClick={() => onAction(rental, 'reject')}>
+   277→                          <XCircle className="h-3 w-3 mr-1" />Reject
+   278→                        </Button>
+   279→                      </>
+   280→                    )}
+   281→                    {isCustomer && (
+   282→                      <Button size="sm" variant="outline" className="h-7 px-2.5 text-[11px] border-red-200 text-red-600 hover:bg-red-50" onClick={() => onAction(rental, 'cancel')}>
+   283→                        <XCircle className="h-3 w-3 mr-1" />Cancel
+   284→                      </Button>
+   285→                    )}
+   286→                  </>
+   287→                )}
+   288→                {(rental.status === 'OWNER_ACCEPTED' || rental.status === 'PAYMENT_COMPLETED' || rental.status === 'READY_FOR_PICKUP') && isCustomer && (
+   289→                  <Button size="sm" variant="outline" className="h-7 px-2.5 text-[11px] border-red-200 text-red-600 hover:bg-red-50" onClick={() => onAction(rental, 'cancel')}>
+   290→                    <XCircle className="h-3 w-3 mr-1" />Cancel
+   291→                  </Button>
+   292→                )}
+   293→                {rental.status === 'OWNER_ACCEPTED' && isOwner && (
+   294→                  <Button size="sm" variant="outline" className="h-7 px-2.5 text-[11px]" onClick={() => onSelect(rental)}>
+   295→                    <Eye className="h-3 w-3 mr-1" />View
+   296→                  </Button>
+   297→                )}
+   298→                {rental.status === 'ACTIVE' && isCustomer && (
+   299→                  <>
+   300→                    <Button size="sm" className="h-11 sm:h-7 px-3 sm:px-2.5 text-xs sm:text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => onAction(rental, 'return')}>
+   301→                      <RotateCcw className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />Start Return
+   302→                    </Button>
+   303→                    <Button size="sm" variant="outline" className="h-11 sm:h-7 px-3 sm:px-2.5 text-xs sm:text-[11px]" onClick={() => onAction(rental, 'extend')}>
+   304→                      <Timer className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />Extend
+   305→                    </Button>
+   306→                  </>
+   307→                )}
+   308→                {rental.status === 'RETURN_PENDING' && isOwner && (
+   309→                  <Button size="sm" className="h-11 sm:h-7 px-3 sm:px-2.5 text-xs sm:text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => onAction(rental, 'confirmReturn')}>
+   310→                    <CheckCircle2 className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />Confirm Return
+   311→                  </Button>
+   312→                )}
+   313→                {rental.status === 'OVERDUE' && isCustomer && (
+   314→                  <>
+   315→                    <Button size="sm" className="h-11 sm:h-7 px-3 sm:px-2.5 text-xs sm:text-[11px] bg-red-600 hover:bg-red-700 text-white" onClick={() => onAction(rental, 'return')}>
+   316→                      <RotateCcw className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />Return Now
+   317→                    </Button>
+   318→                    <Button size="sm" variant="outline" className="h-11 sm:h-7 px-3 sm:px-2.5 text-xs sm:text-[11px]" onClick={() => onAction(rental, 'contact')}>
+   319→                      <Phone className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1" />Contact
+   320→                    </Button>
+   321→                  </>
+   322→                )}
+   323→                {rental.status === 'COMPLETED' && isCustomer && (
+   324→                  <Button size="sm" variant="outline" className="h-7 px-2.5 text-[11px] border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => onAction(rental, 'rentAgain')}>
+   325→                    Rent Again
+   326→                  </Button>
+   327→                )}
+   328→                <Button size="sm" variant="ghost" className="h-7 px-2 text-[11px] text-slate-400" onClick={() => onSelect(rental)}>
+   329→                  <ChevronRight className="h-3 w-3" />
+   330→                </Button>
+   331→              </div>
+   332→            </div>
+   333→          </div>
+   334→        </CardContent>
+   335→      </Card>
+   336→    </motion.div>
+   337→  );
+   338→}
+   339→
+   340→// ─── Empty State ───────────────────────────────────────────
+   341→function EmptyState({ tab }: { tab: TabKey }) {
+   342→  const messages: Record<TabKey, { title: string; desc: string }> = {
+   343→    all: { title: 'No rentals yet', desc: 'When you rent or lend items, they will appear here.' },
+   344→    upcoming: { title: 'No upcoming rentals', desc: 'Your upcoming rentals will show here.' },
+   345→    active: { title: 'No active rentals', desc: 'Currently, you have no active rentals.' },
+   346→    returning: { title: 'No returns in progress', desc: 'Return requests will appear here.' },
+   347→    completed: { title: 'No completed rentals', desc: 'Completed rentals will show here.' },
+   348→    cancelled: { title: 'No cancelled rentals', desc: 'Cancelled rentals will appear here.' },
+   349→    overdue: { title: 'No overdue rentals', desc: 'Overdue rentals will show here.' },
+   350→  };
+   351→  const msg = messages[tab];
+   352→  return (
+   353→    <motion.div
+   354→      initial={{ opacity: 0, y: 20 }}
+   355→      animate={{ opacity: 1, y: 0 }}
+   356→      className="flex flex-col items-center justify-center py-16 text-center"
+   357→    >
+   358→      <div className="h-16 w-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+   359→        <PackageOpen className="h-8 w-8 text-slate-400" />
+   360→      </div>
+   361→      <h3 className="text-lg font-semibold text-slate-900">{msg.title}</h3>
+   362→      <p className="text-sm text-slate-500 mt-1 max-w-sm">{msg.desc}</p>
+   363→      <Button
+   364→        className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white"
+   365→        onClick={() => useAppStore.getState().navigate('marketplace')}
+   366→      >
+   367→        Browse Marketplace
+   368→      </Button>
+   369→    </motion.div>
+   370→  );
+   371→}
+   372→
+   373→// ─── Main Page ─────────────────────────────────────────────
+   374→export default function MyRentalsPage() {
+   375→  const navigate = useAppStore((s) => s.navigate);
+   376→  const user = useAppStore((s) => s.user);
+   377→  const queryClient = useQueryClient();
+   378→  const [activeTab, setActiveTab] = useState<TabKey>('all');
+   379→  const [detailOpen, setDetailOpen] = useState(false);
+   380→  const [selectedRental, setSelectedRental] = useState<Rental | null>(null);
+   381→  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+   382→  const [paymentRental, setPaymentRental] = useState<Rental | null>(null);
+   383→  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+   384→  const [cancelRental, setCancelRental] = useState<Rental | null>(null);
+   385→  const [cancelSuccess, setCancelSuccess] = useState(false);
+   386→
+   387→  // Fetch rentals as customer
+   388→  const { data: customerRentals = [], isLoading: loadingCustomer } = useQuery({
+   389→    queryKey: ['rentals', 'customer'],
+   390→    queryFn: async () => {
+   391→      const data = await api.getRentals({ role: 'customer' });
+   392→      return data as unknown as Rental[];
+   393→    },
+   394→    enabled: !!user,
+   395→  });
+   396→
+   397→  // Fetch rentals as owner
+   398→  const { data: ownerRentals = [], isLoading: loadingOwner } = useQuery({
+   399→    queryKey: ['rentals', 'owner'],
+   400→    queryFn: async () => {
+   401→      const data = await api.getRentals({ role: 'owner' });
+   402→      return data as unknown as Rental[];
+   403→    },
+   404→    enabled: !!user,
+   405→  });
+   406→
+   407→  // Merge and deduplicate
+   408→  const allRentals = (() => {
+   409→    const map = new Map<string, Rental>();
+   410→    for (const r of [...customerRentals, ...ownerRentals]) {
+   411→      map.set(r.id, r as Rental);
+   412→    }
+   413→    return Array.from(map.values()).sort(
+   414→      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+   415→    );
+   416→  })();
+   417→
+   418→  const isLoading = loadingCustomer || loadingOwner;
+   419→
+   420→  // Filter by tab
+   421→  const filteredRentals = activeTab === 'all'
+   422→    ? allRentals
+   423→    : allRentals.filter((r) => statusToTab[r.status] === activeTab);
+   424→
+   425→  // Mutations
+   426→  const payMutation = useMutation({
+   427→    mutationFn: (id: string) => api.payRental(id),
+   428→    onSuccess: () => { toast.success('Payment successful!'); queryClient.invalidateQueries({ queryKey: ['rentals'] }); },
+   429→    onError: (e: Error) => toast.error(e.message),
+   430→  });
+   431→
+   432→  const cancelMutation = useMutation({
+   433→    mutationFn: ({ id, reason }: { id: string; reason?: string }) => api.cancelRental(id, reason),
+   434→    onSuccess: () => {
+   435→      setCancelSuccess(true);
+   436→      queryClient.invalidateQueries({ queryKey: ['rentals'] });
+   437→    },
+   438→    onError: (e: Error) => toast.error(e.message),
+   439→  });
+   440→
+   441→  const acceptMutation = useMutation({
+   442→    mutationFn: (id: string) => api.acceptRental(id),
+   443→    onSuccess: () => { toast.success('Rental accepted'); queryClient.invalidateQueries({ queryKey: ['rentals'] }); },
+   444→    onError: (e: Error) => toast.error(e.message),
+   445→  });
+   446→
+   447→  const rejectMutation = useMutation({
+   448→    mutationFn: (id: string) => api.rejectRental(id),
+   449→    onSuccess: () => { toast.success('Rental rejected'); queryClient.invalidateQueries({ queryKey: ['rentals'] }); },
+   450→    onError: (e: Error) => toast.error(e.message),
+   451→  });
+   452→
+   453→  const returnMutation = useMutation({
+   454→    mutationFn: (id: string) => api.returnRental(id),
+   455→    onSuccess: () => { toast.success('Return initiated'); queryClient.invalidateQueries({ queryKey: ['rentals'] }); },
+   456→    onError: (e: Error) => toast.error(e.message),
+   457→  });
+   458→
+   459→  const handleAction = useCallback((rental: Rental, action: string) => {
+   460→    switch (action) {
+   461→      case 'pay':
+   462→        setPaymentRental(rental);
+   463→        setPaymentModalOpen(true);
+   464→        break;
+   465→      case 'cancel':
+   466→        setCancelRental(rental);
+   467→        setCancelDialogOpen(true);
+   468→        break;
+   469→      case 'reject':
+   470→        rejectMutation.mutate(rental.id);
+   471→        break;
+   472→      case 'accept':
+   473→        acceptMutation.mutate(rental.id);
+   474→        break;
+   475→      case 'return':
+   476→        returnMutation.mutate(rental.id);
+   477→        break;
+   478→      case 'extend':
+   479→        setSelectedRental(rental);
+   480→        setDetailOpen(true);
+   481→        break;
+   482→      case 'confirmReturn':
+   483→        returnMutation.mutate(rental.id);
+   484→        break;
+   485→      case 'contact':
+   486→        navigate('messages');
+   487→        break;
+   488→      case 'rentAgain':
+   489→        navigate('product', { productId: rental.productId });
+   490→        break;
+   491→    }
+   492→  }, [payMutation, cancelMutation, acceptMutation, rejectMutation, returnMutation, navigate]);
+   493→
+   494→  const handleSelect = (rental: Rental) => {
+   495→    setSelectedRental(rental);
+   496→    setDetailOpen(true);
+   497→  };
+   498→
+   499→  // Tab counts
+   500→  const tabCounts: Record<TabKey, number> = {
+   501→    all: allRentals.length,
+   502→    upcoming: allRentals.filter((r) => statusToTab[r.status] === 'upcoming').length,
+   503→    active: allRentals.filter((r) => statusToTab[r.status] === 'active').length,
+   504→    returning: allRentals.filter((r) => statusToTab[r.status] === 'returning').length,
+   505→    completed: allRentals.filter((r) => statusToTab[r.status] === 'completed').length,
+   506→    cancelled: allRentals.filter((r) => statusToTab[r.status] === 'cancelled').length,
+   507→    overdue: allRentals.filter((r) => statusToTab[r.status] === 'overdue').length,
+   508→  };
+   509→
+   510→  return (
+   511→    <div className="min-h-screen bg-slate-50 pb-20 sm:pb-0">
+   512→      {/* Header */}
+   513→      <div className="bg-white border-b border-slate-200 sticky top-0 z-30">
+   514→        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+   515→          <div className="flex items-center gap-3 h-16">
+   516→            <Button variant="ghost" size="sm" className="text-slate-600 hover:text-slate-900" onClick={() => navigate('dashboard')}>
+   517→              <ArrowLeft className="h-4 w-4 mr-1" />Back
+   518→            </Button>
+   519→            <div className="h-6 w-px bg-slate-200" />
+   520→            <h1 className="text-lg font-bold text-slate-900">My Rentals</h1>
+   521→            <span className="text-sm text-slate-400 ml-1">({allRentals.length})</span>
+   522→          </div>
+   523→        </div>
+   524→      </div>
+   525→
+   526→      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+   527→        {/* Tabs */}
+   528→        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabKey)} className="mb-6">
+   529→          <TabsList className="bg-slate-100 p-1 h-auto flex-nowrap gap-1 overflow-x-auto scrollbar-none">
+   530→            {(Object.keys(tabCounts) as TabKey[]).map((tab) => (
+   531→              <TabsTrigger
+   532→                key={tab}
+   533→                value={tab}
+   534→                className="text-xs sm:text-sm px-3 sm:px-4 py-1.5 whitespace-nowrap data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm capitalize"
+   535→              >
+   536→                {tab}
+   537→                {tabCounts[tab] > 0 && (
+   538→                  <span className="ml-1.5 text-[10px] bg-slate-200 text-slate-600 rounded-full px-1.5 py-0.5 data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700">
+   539→                    {tabCounts[tab]}
+   540→                  </span>
+   541→                )}
+   542→              </TabsTrigger>
+   543→            ))}
+   544→          </TabsList>
+   545→        </Tabs>
+   546→
+   547→        {/* Content */}
+   548→        {isLoading ? (
+   549→          <div className="space-y-3">
+   550→            {Array.from({ length: 4 }).map((_, i) => <RentalCardSkeleton key={i} />)}
+   551→          </div>
+   552→        ) : filteredRentals.length === 0 ? (
+   553→          <EmptyState tab={activeTab} />
+   554→        ) : (
+   555→          <div className="space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto pr-1 pb-16 sm:pb-0">
+   556→            <AnimatePresence mode="popLayout">
+   557→              {filteredRentals.map((rental) => (
+   558→                <RentalCard
+   559→                  key={rental.id}
+   560→                  rental={rental as Rental}
+   561→                  onSelect={handleSelect}
+   562→                  onAction={handleAction}
+   563→                  isAccepting={acceptMutation.isPending}
+   564→                />
+   565→              ))}
+   566→            </AnimatePresence>
+   567→          </div>
+   568→        )}
+   569→      </div>
+   570→
+   571→      {/* Detail Dialog */}
+   572→      <RentalDetailDialog
+   573→        rentalId={selectedRental?.id ?? null}
+   574→        open={detailOpen}
+   575→        onClose={() => { setDetailOpen(false); setSelectedRental(null); }}
+   576→      />
+   577→      {/* Cancel Dialog */}
+   578→      <CancelRentalDialog
+   579→        open={cancelDialogOpen}
+   580→        onClose={() => { setCancelDialogOpen(false); setCancelRental(null); setCancelSuccess(false); }}
+   581→        onConfirm={(reason) => cancelMutation.mutate({ id: cancelRental!.id, reason })}
+   582→        rentalStatus={cancelRental?.status as RentalStatus}
+   583→        productName={cancelRental?.product?.title || ''}
+   584→        totalAmount={cancelRental?.totalAmount || 0}
+   585→        isPending={cancelMutation.isPending}
+   586→        isSuccess={cancelSuccess}
+   587→      />
+   588→      {/* Payment Modal */}
+   589→      <PaymentCheckoutModal
+   590→        open={paymentModalOpen}
+   591→        onClose={() => { setPaymentModalOpen(false); setPaymentRental(null); }}
+   592→        rentalId={paymentRental?.id || ''}
+   593→        rentalData={paymentRental ? {
+   594→          totalAmount: paymentRental.totalAmount,
+   595→          rentalAmount: paymentRental.rentalAmount,
+   596→          platformFee: paymentRental.platformFee,
+   597→          tax: paymentRental.tax,
+   598→          deliveryFee: paymentRental.deliveryFee,
+   599→          discount: paymentRental.discount,
+   600→          securityDeposit: paymentRental.securityDeposit,
+   601→          rentalDays: paymentRental.rentalDays,
+   602→          dailyRate: paymentRental.dailyRate,
+   603→          startDate: paymentRental.startDate,
+   604→          endDate: paymentRental.endDate,
+   605→          productTitle: paymentRental.product?.title,
+   606→        } : null}
+   607→        onSuccess={() => {
+   608→          setPaymentModalOpen(false);
+   609→          setPaymentRental(null);
+   610→          queryClient.invalidateQueries({ queryKey: ['rentals'] });
+   611→          toast.success('Payment successful! Rental request sent to owner.');
+   612→        }}
+   613→      />
+   614→    </div>
+   615→  );
+   616→}
+   617→
